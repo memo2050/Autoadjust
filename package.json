@@ -1,0 +1,15 @@
+{
+  "name": "spark",
+  "private": true,
+  "scripts": { "dev": "next dev", "build": "next build", "start": "next start" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@supabase/ssr": "latest",
+    "@supabase/supabase-js": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "stripe": "latest"
+  },
+  "devDependencies": { "@types/node": "latest", "@types/react": "latest", "typescript": "latest" }
+}
