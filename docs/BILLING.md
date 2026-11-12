@@ -59,3 +59,6 @@ Everything below stays **inert until `BILLING_ENFORCE=1`**; Stripe is **test mod
 **Env vars:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PRO_ANNUAL`, `STRIPE_PRICE_ENTERPRISE`, `STRIPE_PRICE_ENTERPRISE_ANNUAL`, `APP_URL`, `BILLING_ENFORCE`. Webhook events to enable in the Stripe test dashboard: the list above.
 
 **Not covered / honest limits:** plan ids are fixed at free/pro/enterprise (limits, names and prices are editable, new plan ids are not); Stripe portal is used for card and billing-detail updates; verified only against a local fake Stripe, not the real Stripe test environment.
+
+## Enforcement preview (read-only)
+`GET /api/soc/billing/admin/preview` (platform admins; shown on `/billing-admin.html`) lists every organization with its usage, the limits that WOULD apply, violations, and whether it would start a fresh trial. It works whether or not `BILLING_ENFORCE` is on and writes nothing. Review it before setting `BILLING_ENFORCE=1`.

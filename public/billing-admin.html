@@ -23,6 +23,7 @@ ul{padding-left:18px;margin:8px 0}
   <div class="card"><h2>Subscriptions and revenue</h2><div id="stats"></div></div>
   <div class="card"><h2>Plans and limits</h2><p class="mut">Changes apply to every organization on that plan. Lowering a limit never deletes existing devices, keys or data; it only stops new ones. Limits take effect only when billing enforcement is switched on for the server.</p><div id="plans" class="grid"></div><div id="planmsg" class="msg"></div>
     <div class="row"><label class="mut">Grace period for failed payments (days)</label><input id="grace" type="number" min="0" max="90" style="width:90px"><button id="savegrace">Save</button></div></div>
+  <div class="card"><h2>Enforcement preview (read-only)</h2><p class="mut">What would happen to each organization if plan limits were switched on today. This page changes nothing.</p><div id="preview"><span class="mut">Loading…</span></div></div>
   <div class="card"><h2>Organizations</h2><div id="orgs"></div></div>
   <div class="card hide" id="manage"><h2 id="mtitle"></h2>
     <div class="row"><b>Custom limits</b><span class="mut">(blank = leave as is; "none" = unlimited)</span></div>
@@ -51,6 +52,11 @@ async function paintPlans(){var r=await api("GET","billing/admin/plans"),box=$("
     card.appendChild(el("button",{text:"Save plan",style:"margin-top:8px",onclick:async function(){var b={};F.forEach(function(f){var v=ins[f[0]].value;b[f[0]]=f[2]==="number"?(v===""?null:Number(v)):v});say("planmsg","Saving…");try{await api("PUT","billing/admin/plans/"+p.id,b);say("planmsg","Saved "+p.id+".","good")}catch(e){say("planmsg",e.message,"err")}}}));box.appendChild(card)})}
 async function paintOrgs(){var r=await api("GET","billing/admin/orgs"),box=$("orgs");box.textContent="";var t=el("table"),h=el("tr");["Organization","Plan","Status","Trial","Period end",""].forEach(function(x){h.appendChild(el("th",{text:x}))});t.appendChild(h);
   r.organizations.forEach(function(o){t.appendChild(el("tr",0,[el("td",{text:o.name}),el("td",{text:o.plan+(o.interval?" ("+o.interval+")":"")}),el("td",{text:o.status+(o.paymentFailedAt?" · payment failed":"")+(o.cancelAtPeriodEnd?" · cancelling":"")}),el("td",{text:o.trial==="none"?"—":o.trial+" "+day(o.trialEndsAt)}),el("td",{text:day(o.currentPeriodEnd)}),el("td",0,[el("button",{class:"sec",text:"Manage",onclick:function(){S.sel=o;$("manage").classList.remove("hide");$("mtitle").textContent="Manage: "+o.name;say("mmsg","");$("manage").scrollIntoView()}})])]))});box.appendChild(t)}
+async function paintPreview(){var r=await api("GET","billing/admin/preview"),b=$("preview");b.textContent="";var m=r.summary;
+  b.appendChild(el("div",{class:"row"},[el("b",{text:m.organizations+" organizations"}),el("span",{class:m.withViolations?"err":"good",text:m.withViolations+" over a limit"}),el("span",{class:"mut",text:m.restricted+" restricted · "+m.wouldStartTrial+" would start a 14-day trial"}),el("span",{class:"mut",text:"Enforcement on server: "+(r.enforcedOnServer?"ON":"off")})]));
+  var t=el("table"),h=el("tr");["Organization","Plan","Devices","API keys","Executors","Retention","Violations"].forEach(function(x){h.appendChild(el("th",{text:x}))});t.appendChild(h);
+  var u=function(a,l){return a+" / "+(l==null?"∞":l)};
+  r.organizations.forEach(function(o){t.appendChild(el("tr",0,[el("td",{text:o.name}),el("td",{text:o.plan+" ("+o.trial+")"}),el("td",{text:u(o.used.devices,o.limits.devices)}),el("td",{text:u(o.used.apiKeys,o.limits.apiKeys)}),el("td",{text:u(o.used.executors,o.limits.executors)}),el("td",{text:o.retentionDays==null?"—":o.retentionDays+" d"}),el("td",{class:o.violations.length?"err":"mut",text:o.violations.length?o.violations.join("; "):"none"})]))});b.appendChild(t);b.appendChild(el("p",{class:"mut",text:r.note}))}
 function lim(v){v=v.trim();if(v==="")return undefined;if(v.toLowerCase()==="none")return null;return Number(v)}
 function act(id,fn){$(id).onclick=async function(){if(!S.sel)return;say("mmsg","Working…");try{var m=await fn();say("mmsg",m||"Done.","good");paintOrgs();paintStats()}catch(e){say("mmsg",e.message,"err")}}}
 act("saveov",async function(){var b={maxDevices:lim($("ovd").value),maxApiKeys:lim($("ovk").value),maxExecutors:lim($("ove").value),retentionDays:lim($("ovr").value)};await api("PUT","billing/admin/orgs/"+S.sel.id+"/overrides",b);return "Custom limits saved."});
@@ -64,7 +70,7 @@ $("savegrace").onclick=async function(){say("planmsg","Saving…");try{await api
   try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){}
   if(!S.ses||!S.ses.access_token){say("top","Please sign in on the account page first.","err");return}
   try{var m=await api("GET","org/mine"),pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org,o=m.organizations.find(function(x){return x.id===pref})||m.organizations[0];S.org=o&&o.id;
-    await api("GET","billing/admin/plans");$("app").classList.remove("hide");await paintStats();await paintPlans();await paintOrgs()}
+    await api("GET","billing/admin/plans");$("app").classList.remove("hide");await paintStats();await paintPlans();await paintPreview();await paintOrgs()}
   catch(e){say("top",e.status===403?"This page is for platform administrators only.":e.message,"err")}
 })();
 })();

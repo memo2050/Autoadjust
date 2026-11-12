@@ -88,6 +88,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
         if (c === "plans" && !o && m === "GET") return json(await BILL.adminPlans(raw, pr));
         if (c === "plans" && o && m === "PUT") return json(await BILL.adminUpdatePlan(raw, pr, o, await readJson(req)));
         if (c === "settings" && m === "PUT") return json(await BILL.adminSettings(raw, pr, await readJson(req)));
+        if (c === "preview" && m === "GET") return json(await BILL.adminPreview(raw, pr, env));
         if (c === "stats" && m === "GET") return json(await BILL.adminStats(raw, pr));
         if (c === "coupons" && m === "POST") return json(await BILL.adminCreateCoupon(raw, pr, await readJson(req), env));
         if (c === "orgs" && !o && m === "GET") return json(await BILL.adminOrgs(raw, pr, env));

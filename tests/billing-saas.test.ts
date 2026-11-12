@@ -125,3 +125,16 @@ test("admin: coupons / discounts / org list / stats; non-admins refused; no secr
     const all = JSON.stringify([o, s, (await w.J("GET", "billing/status", w.tok.owner)).body]); assert.ok(!all.includes(KEY) && !all.includes(WHSEC));
   } finally { w.f.close(); }
 });
+test("enforcement preview: read-only, per organization usage vs limits, violations listed, admin only, nothing written or blocked", async () => {
+  const w = await world(); try {
+    delete (w.env as any).BILLING_ENFORCE;                                           // the server is NOT enforcing; the preview must still show what would happen
+    const mk = (n: number) => Array.from({ length: n }, (_, i) => ({ id: ORG_A + ":p" + i, orgId: ORG_A, type: "server", up: true, metrics: {}, links: [], history: [], source: "live", receivedAt: new Date().toISOString() }));
+    await w.s.upsert("noc_devices", mk(30) as any); const before = JSON.stringify([await w.s.select("org_billing", {}), await w.s.select("noc_devices", {})]);
+    assert.equal((await w.J("GET", "billing/admin/preview", w.tok.owner)).status, 403);
+    const r = (await w.J("GET", "billing/admin/preview", w.tok.admin)).body, a = r.organizations.find((x: any) => x.id === ORG_A), b = r.organizations.find((x: any) => x.id === ORG_B);
+    assert.equal(r.readOnly, true); assert.equal(r.enforcedOnServer, false); assert.deepEqual([a.used.devices, a.limits.devices], [30, 25]); assert.ok(a.violations[0].startsWith("devices: 30 used")); assert.deepEqual(b.violations, [], "org B unaffected by org A's devices");
+    assert.equal(a.trial, "would start a fresh trial"); assert.equal(r.summary.withViolations, 1);
+    assert.equal(JSON.stringify([await w.s.select("org_billing", {}), await w.s.select("noc_devices", {})]), before, "preview wrote nothing (no trial started, no device touched)");
+    const t = await w.J("POST", "noc/telemetry", w.tok.owner, { devices: [{ id: "new1", type: "server" }] }); assert.equal(t.body.deviceLimitSkipped, undefined, "and the server still does not enforce");
+  } finally { w.f.close(); }
+});
