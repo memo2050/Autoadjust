@@ -44,7 +44,9 @@ Everything below stays **inert until `BILLING_ENFORCE=1`**; Stripe is **test mod
 
 **Database (migration `0110_billing_plans.sql`, additive, rollback provided, scratch DB only):** `billing_plans`, `billing_settings`, `billing_invoices`, `billing_payments`, and new columns on `org_billing` (interval, trial dates, overrides, last payment failure). RLS on, no anon/authenticated access. If the tables are missing the code falls back to the built-in defaults and the Free plan.
 
-**Trial:** starts the first time enforcement sees an organization (existing organizations get a full trial from that moment). After it ends, with no subscription, the organization is *restricted*: existing devices, keys, data and monitoring keep working; only adding new devices/keys/executors is refused (HTTP 402, `code: trial_expired`, `upgradeUrl`). An admin can grant a promotional trial.
+**Existing customers are grandfathered (decision taken to protect current users):** the first time enforcement is seen, the server records `enforcementStartedAt`. Every organization created before that keeps working with **no trial expiry and is never restricted** (Free limits still stop only NEW additions beyond the limit; nothing existing is touched). Only organizations created after it get the trial below.
+
+**Trial:** starts the first time enforcement sees a NEW organization. After it ends, with no subscription, the organization is *restricted*: existing devices, keys, data and monitoring keep working; only adding new devices/keys/executors is refused (HTTP 402, `code: trial_expired`, `upgradeUrl`). An admin can grant a promotional trial.
 
 **Limit errors:** HTTP 402 with `code` (`plan_limit` / `trial_expired`), `limit`, `max`, `current`, `plan`, `upgradeUrl`. Lowering a limit never deletes anything.
 

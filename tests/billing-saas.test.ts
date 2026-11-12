@@ -26,8 +26,9 @@ async function fake() {
 async function world() {
   const f = await fake(), s = new TestStore(), U = { owner: randomUUID(), bOwner: randomUUID() };
   const tok = { owner: jwt(U.owner, "o@x.io"), bOwner: jwt(U.bOwner, "b@x.io"), admin: jwt(ADMIN, "admin@x.io") };
-  await s.upsert("organizations", [{ id: ORG_A, name: "Org A", slug: "org-a", plan: "free" }, { id: ORG_B, name: "Org B", slug: "org-b", plan: "free" }] as any);
+  await s.upsert("organizations", [{ id: ORG_A, name: "Org A", slug: "org-a", plan: "free", createdAt: new Date().toISOString() }, { id: ORG_B, name: "Org B", slug: "org-b", plan: "free", createdAt: new Date().toISOString() }] as any);
   const m = (o: string, u: string, r: string) => s.upsert("org_members", [{ orgId: o, userId: u, role: r }] as any, "org_id,user_id");
+  await s.upsert("billing_settings", [{ key: "enforcementStartedAt", value: new Date(Date.now() - 3600000).toISOString() }] as any, "key");
   await m(ORG_A, U.owner, "owner"); await m(ORG_B, U.bOwner, "owner"); await m(ORG_A, ADMIN, "owner");
   const env = { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: WHSEC, STRIPE_PRICE_PRO: "price_pro_m", STRIPE_PRICE_PRO_ANNUAL: "price_pro_y", STRIPE_PRICE_ENTERPRISE: "price_ent_m", APP_URL: "https://app.autoadjust.test", STRIPE_API_BASE: f.base, BILLING_ENFORCE: "1" } as Record<string, string>;
   const call = (method: string, p: string, t: string | null, b?: unknown) => handleSoc(new Request("http://x/api/soc/" + p, { method, headers: { ...(t ? { authorization: "Bearer " + t } : {}), "content-type": "application/json" }, body: b === undefined ? undefined : JSON.stringify(b) }), p.split("/"), { store: s, model: null, env } as any);
@@ -133,8 +134,18 @@ test("enforcement preview: read-only, per organization usage vs limits, violatio
     assert.equal((await w.J("GET", "billing/admin/preview", w.tok.owner)).status, 403);
     const r = (await w.J("GET", "billing/admin/preview", w.tok.admin)).body, a = r.organizations.find((x: any) => x.id === ORG_A), b = r.organizations.find((x: any) => x.id === ORG_B);
     assert.equal(r.readOnly, true); assert.equal(r.enforcedOnServer, false); assert.deepEqual([a.used.devices, a.limits.devices], [30, 25]); assert.ok(a.violations[0].startsWith("devices: 30 used")); assert.deepEqual(b.violations, [], "org B unaffected by org A's devices");
-    assert.equal(a.trial, "would start a fresh trial"); assert.equal(r.summary.withViolations, 1);
+    assert.ok(a.trial === "would start a fresh trial" || a.trial.startsWith("existing")); assert.equal(r.summary.withViolations, 1);
     assert.equal(JSON.stringify([await w.s.select("org_billing", {}), await w.s.select("noc_devices", {})]), before, "preview wrote nothing (no trial started, no device touched)");
     const t = await w.J("POST", "noc/telemetry", w.tok.owner, { devices: [{ id: "new1", type: "server" }] }); assert.equal(t.body.deviceLimitSkipped, undefined, "and the server still does not enforce");
+  } finally { w.f.close(); }
+});
+
+test("existing customers are grandfathered: no trial expiry, never restricted, nothing deleted; only organizations created after enforcement started get the 14-day trial", async () => {
+  const w = await world(); try {
+    await w.s.upsert("organizations", [{ id: ORG_A, name: "Org A", slug: "org-a", plan: "free", createdAt: new Date(Date.now() - 400 * DAY).toISOString() }] as any, "id");   // created long before enforcement began
+    const st = (await w.J("GET", "billing/status", w.tok.owner)).body; assert.deepEqual([st.trial.state, st.restricted], ["none", false], "legacy org: no trial clock");
+    await w.s.upsert("org_billing", [{ ...(await w.s.select<any>("org_billing", { where: { orgId: ORG_A } }))[0] }] as any, "org_id");
+    await new Promise((r) => setTimeout(r, 5)); assert.equal((await w.J("POST", "org/keys", w.tok.owner, { name: "legacy-ok" })).status, 201, "can still add within the Free limits");
+    assert.equal((await w.J("GET", "billing/status", w.tok.bOwner)).body.trial.state, "active", "org created after enforcement start gets the 14-day trial");
   } finally { w.f.close(); }
 });

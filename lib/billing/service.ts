@@ -30,12 +30,20 @@ export const listPlans = async (raw: Store) => Promise.all(PLAN_IDS.map((id) => 
 export async function graceDays(raw: Store): Promise<number> { try { const r = (await raw.select<{ value: string }>(TS, { where: { key: "graceDays" }, limit: 1 }))[0]; const n = Number(r?.value); return Number.isInteger(n) && n >= 0 && n <= 90 ? n : 7; } catch { return 7; } }
 export const trialState = (b: BillingRow | null, plan: PlanId, now: number): "none" | "active" | "expired" => (plan !== "free" || !b?.trialEndsAt ? "none" : Date.parse(b.trialEndsAt) > now ? "active" : "expired");
 
-/** Starts the free trial the first time an organization is seen while enforcement is on (existing organizations get a full trial from that moment, not from when they were created). */
+/** Existing customers are GRANDFATHERED: the moment enforcement is first seen is recorded, and every organization created before it keeps working with no trial expiry
+ *  (Free-plan limits still stop NEW additions beyond the limit, never existing items). Only organizations created after that moment get the 14-day trial. */
+const enforcementStart = async (raw: Store, now: number, write: boolean): Promise<number> => {
+  try { const r = (await raw.select<{ value: string }>(TS, { where: { key: "enforcementStartedAt" }, limit: 1 }))[0]; if (r) return Date.parse(r.value) || now; } catch { return now; }
+  if (write) { try { await raw.upsert(TS, [{ key: "enforcementStartedAt", value: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() } as any], "key"); } catch { /* best effort */ } }
+  return now;
+};
+export const isLegacyOrg = async (raw: Store, orgId: string, start: number) => { try { const o = (await raw.select<{ createdAt?: string }>("organizations", { where: { id: orgId }, limit: 1 }))[0]; const t = o?.createdAt ? Date.parse(o.createdAt) : NaN; return !Number.isFinite(t) || t < start; } catch { return true; } };
 async function ensureTrial(raw: Store, orgId: string, b: BillingRow | null, plan: PlanId, env: Env, now: number): Promise<BillingRow | null> {
   if (!billingEnforced(env) || plan !== "free" || b?.trialStartedAt || b?.subscriptionId) return b;
   const days = (await loadPlan(raw, "free")).trialDays; if (!days) return b;
-  const row: BillingRow = { ...(b ?? { orgId, plan: "free", status: "none" }), orgId, trialStartedAt: new Date(now).toISOString(), trialEndsAt: new Date(now + days * DAY).toISOString() };
-  try { await saveRow(raw, row); await audit(new ScopedStore(raw, orgId), SYSTEM, "billing.trial.start", orgId, { days }); return row; } catch { return b; }
+  const legacy = await isLegacyOrg(raw, orgId, await enforcementStart(raw, now, true));
+  const row: BillingRow = { ...(b ?? { orgId, plan: "free", status: "none" }), orgId, trialStartedAt: new Date(now).toISOString(), trialEndsAt: legacy ? null : new Date(now + days * DAY).toISOString() };
+  try { await saveRow(raw, row); await audit(new ScopedStore(raw, orgId), SYSTEM, legacy ? "billing.grandfathered" : "billing.trial.start", orgId, legacy ? {} : { days }); return row; } catch { return b; }
 }
 export async function getEntitlements(raw: Store, orgId: string, now = Date.now(), env: Env = process.env, opts: { noWrite?: boolean } = {}): Promise<Entitlements> {
   let b = await getRow(raw, orgId); const plan = effectivePlan(b, now, await graceDays(raw));
@@ -234,7 +242,7 @@ export async function adminStats(raw: Store, p: Principal, now = Date.now()) {
 
 /** READ-ONLY preview of what would happen to every organization if BILLING_ENFORCE=1 were switched on now. Writes nothing (no trial is started, nothing is blocked or deleted). */
 export async function adminPreview(raw: Store, p: Principal, env: Env = process.env, now = Date.now()) {
-  adminOnly(p); const on: Env = { ...env, BILLING_ENFORCE: "1" }, orgs = await raw.select<{ id: string; name: string }>("organizations", { limit: 5000 });
+  adminOnly(p); const start = await enforcementStart(raw, now, false), on: Env = { ...env, BILLING_ENFORCE: "1" }, orgs = await raw.select<{ id: string; name: string }>("organizations", { limit: 5000 });
   const count = async (table: string, f: (r: any) => boolean = () => true) => { const m = new Map<string, number>(); try { for (const r of await raw.select<any>(table, { limit: 200000 })) if (r.orgId && f(r)) m.set(r.orgId, (m.get(r.orgId) ?? 0) + 1); } catch { /* table missing: counts stay 0 */ } return m; };
   const dev = await count("noc_devices"), keys = await count("org_api_keys", (r) => !r.revokedAt), exe = await count("noc_executors", (r) => r.enabled), rows = await raw.select<BillingRow>(TB, { limit: 10000 }).catch(() => [] as BillingRow[]);
   const out = [];
@@ -242,10 +250,10 @@ export async function adminPreview(raw: Store, p: Principal, env: Env = process.
     const e = await getEntitlements(raw, o.id, now, on, { noWrite: true }), b = rows.find((r) => r.orgId === o.id) ?? null, used = { devices: dev.get(o.id) ?? 0, apiKeys: keys.get(o.id) ?? 0, executors: exe.get(o.id) ?? 0 };
     const lim = { devices: e.maxDevices, apiKeys: e.maxApiKeys, executors: e.maxExecutors }, violations: string[] = [];
     (Object.keys(used) as (keyof typeof used)[]).forEach((k) => { const l = lim[k]; if (l !== null && used[k] > l) violations.push(`${k}: ${used[k]} used, limit ${l}`); });
-    const trial = trialState(b, e.plan, now), wouldStartTrial = e.plan === "free" && !b?.trialStartedAt && !b?.subscriptionId;
-    out.push({ id: o.id, name: o.name, plan: e.plan, trial: wouldStartTrial ? "would start a fresh trial" : trial, restrictedNow: e.restricted, used, limits: lim, retentionDays: e.retentionDays, violations,
+    const trial = trialState(b, e.plan, now), fresh = e.plan === "free" && !b?.trialStartedAt && !b?.subscriptionId, legacy = fresh && await isLegacyOrg(raw, o.id, start), wouldStartTrial = fresh && !legacy;
+    out.push({ id: o.id, name: o.name, plan: e.plan, trial: legacy ? "existing customer: no trial expiry" : wouldStartTrial ? "would start a fresh trial" : trial, restrictedNow: e.restricted, used, limits: lim, retentionDays: e.retentionDays, violations,
       effect: violations.length || e.restricted ? "Existing devices/keys/executors keep working and nothing is deleted; adding NEW ones would be refused." : "No impact." });
   }
-  return { readOnly: true, enforcedOnServer: billingEnforced(env), summary: { organizations: out.length, withViolations: out.filter((x) => x.violations.length).length, restricted: out.filter((x) => x.restrictedNow).length, wouldStartTrial: out.filter((x) => x.trial === "would start a fresh trial").length }, organizations: out,
+  return { readOnly: true, enforcedOnServer: billingEnforced(env), summary: { organizations: out.length, withViolations: out.filter((x) => x.violations.length).length, restricted: out.filter((x) => x.restrictedNow).length, wouldStartTrial: out.filter((x) => x.trial === "would start a fresh trial").length, grandfathered: out.filter((x) => x.trial.startsWith("existing")).length }, organizations: out,
     note: "Preview only. Enforcement is switched on by the server setting BILLING_ENFORCE=1; this page never changes anything." };
 }
