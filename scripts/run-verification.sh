@@ -5,7 +5,7 @@ set -u; cd "$(dirname "$0")/.."
 D="verification-logs/$(date -u +%Y%m%dT%H%M%SZ)"; mkdir -p "$D"
 { echo "uname: $(uname -a)"; echo "node: $(node -v 2>&1)"; echo "npm: $(npm -v 2>&1)"; echo "registry: $(npm config get registry 2>&1)"; echo "git: $(git rev-parse HEAD 2>&1 || true)"
   echo "package.json sha256: $(sha256sum package.json | cut -d' ' -f1)"; [ -f package-lock.json ] && echo "package-lock.json sha256: $(sha256sum package-lock.json | cut -d' ' -f1)" || echo "package-lock.json: absent"; } >"$D/00-environment.txt" 2>&1
-run() { local n="$1"; shift; echo ">>> $n  ($(date -u +%FT%TZ))"; { echo "# $n"; echo "# command: $*"; echo "# started: $(date -u +%FT%TZ)"; "$@" 2>&1 | while IFS= read -r l; do printf '%s %s\n' "$(date -u +%T)" "$l"; done; echo "# exit-code: ${PIPESTATUS[0]}"; echo "# ended: $(date -u +%FT%TZ)"; } >"$D/$n.log"; local rc; rc=$(grep -o '^# exit-code: .*' "$D/$n.log" | tail -1 | cut -d' ' -f3); echo "<<< $n exit=$rc"; return "${rc:-1}"; }
+run() { local n="$1"; shift; echo ">>> $n  ($(date -u +%FT%TZ))"; { echo "# $n"; echo "# command: $*"; echo "# started: $(date -u +%FT%TZ)"; "$@" 2>&1 | while IFS= read -r l; do printf '%s %s\n' "$(date -u +%T)" "$l"; done; echo "# exit-code: ${PIPESTATUS[0]}"; echo "# ended: $(date -u +%FT%TZ)"; } >"$D/$n.log"; local rc; rc=$(grep -o '^# exit-code: .*' "$D/$n.log" | tail -1 | cut -d' ' -f3); echo "<<< $n exit=$rc"; if [ "${rc:-1}" != "0" ] || [ -n "${CI:-}" ]; then echo "----- BEGIN FULL LOG $n (unedited) -----"; cat "$D/$n.log"; echo "----- END FULL LOG $n -----"; fi; return "${rc:-1}"; }
 rc=0
 run 01-check-pins node scripts/check-pins.mjs || rc=1
 run 02-generate-lockfile bash scripts/generate-lockfile.sh || rc=1
