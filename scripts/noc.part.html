@@ -1,0 +1,30 @@
+<!--NOC-BEGIN--><section id="noc" data-page="noc" aria-label="NOC AI Team">
+<h2>NOC AI Team <span id="noc-mode" class="nbadge b-demo">SIMULATED TELEMETRY</span></h2>
+<p class="sub" id="noc-sub">Network Operations Center: six AI agents that analyze real monitoring data, work incidents and propose approved actions, and work with the SOC.</p>
+<div id="noc-banner"></div>
+<section class="npn n12" aria-labelledby="noc-h-conn" style="margin-bottom:14px"><h3 id="noc-h-conn">Monitoring Connectivity Center</h3><div id="noc-conn"></div></section>
+<div class="nagents" id="noc-agents" role="group" aria-label="NOC AI agents"></div>
+<div id="noc-ws" class="npn nws" hidden aria-live="polite"></div>
+<div class="nkpis" id="noc-kpis"></div>
+<div class="ngrid">
+<section class="npn n12" id="noc-tp" aria-label="Network topology and discovery platform"><div class="nempty">Loading the topology platform…</div></section>
+<section class="npn n12" aria-labelledby="noc-h-mon"><h3 id="noc-h-mon">Real-time monitoring</h3><div id="noc-charts" class="ncharts"></div></section>
+<section class="npn n6" aria-labelledby="noc-h-srv"><h3 id="noc-h-srv">Server and infrastructure health</h3><div id="noc-servers" class="ntbw"></div></section>
+<section class="npn n6" aria-labelledby="noc-h-av"><h3 id="noc-h-av">Network availability</h3><div id="noc-avail" class="navl"></div><h4>Highest latency</h4><div id="noc-lat"></div></section>
+<section class="npn n6" aria-labelledby="noc-h-rev"><h3 id="noc-h-rev">Recent monitoring events</h3><div id="noc-rev"><div class="nempty">Demo mode: no events. Connect a source to see real ones.</div></div></section>
+<section class="npn n6" aria-labelledby="noc-h-rif"><h3 id="noc-h-rif">Interfaces and traffic</h3><div id="noc-rif"><div class="nempty">Demo mode: no interface data. Connect a source to see real data.</div></div></section>
+<section class="npn n12" aria-labelledby="noc-h-wf"><h3 id="noc-h-wf">Operational workflow <button type="button" class="nbtn" id="noc-wfgo" style="margin-left:10px;padding:6px 14px">Run all six agents</button></h3><p class="nmut" style="margin:0">Detection → Analysis → Troubleshooting → Resolution → Automation → Reporting (demo). With a live source this panel shows the selected incident's 14-step workflow instead. Each stage is a real agent run; a pulse travels to the next agent when a stage hands over.</p><div id="noc-wf"></div><h4>Live agent feed</h4><div id="noc-feed" class="nlog"></div></section>
+<section class="npn n6" aria-labelledby="noc-h-inc"><h3 id="noc-h-inc">Active network incidents</h3><div id="noc-inc"></div><h4>Incident response history</h4><div id="noc-hist"></div></section>
+<section class="npn n6" aria-labelledby="noc-h-apv"><h3 id="noc-h-apv">Change approvals</h3><div id="noc-apv"></div><h4>Audit log (this browser)</h4><div id="noc-audit" class="nlog"></div></section>
+<section class="npn n12" aria-labelledby="noc-h-sh"><h3 id="noc-h-sh">NOC + SOC collaboration: shared incident workflow</h3><div id="noc-shared"></div></section>
+<section class="npn n12" aria-labelledby="noc-h-int"><h3 id="noc-h-int">Data sources and integration health</h3><p class="nmut" style="margin:0 0 6px">Nothing is marked connected unless telemetry has really arrived.</p><div id="noc-integ"></div>
+<details class="nguide"><summary>How to connect real telemetry</summary><ol><li>Deploy the Spark backend (see the SOC setup notes) and run <code>supabase/005_noc.sql</code>.</li><li>From any monitoring tool or script, POST JSON to <code>/api/soc/noc/telemetry</code> with the ingest token as a Bearer token:</li></ol><pre>{ "source": "my-poller",
+  "devices": [
+    { "name": "CORE-SW-01", "type": "switch", "ip": "10.0.0.3", "up": true,
+      "metrics": { "latencyMs": 1, "lossPct": 0, "cpu": 33, "mem": 40, "bwInMbps": 420, "bwOutMbps": 380, "bwCapMbps": 10000 },
+      "links": [ { "to": "dist-sw-01", "utilPct": 52, "capMbps": 10000 } ],
+      "config": { "ntp": "time.example.net", "snmp": "v3", "telnet": false, "syslog": "10.0.9.5" } } ] }</pre><p>Types: internet, router, switch, firewall, server, hypervisor, cloud, endpoint, accesspoint, storage. Reload this page and the badge changes to LIVE TELEMETRY. Adapters for SNMP, syslog, Zabbix, PRTG, Nagios, Prometheus/Grafana and cloud APIs are not built yet.</p></details></section>
+</div>
+<p style="margin-top:14px"><button type="button" class="nmini" id="noc-reset">Clear this browser's NOC history</button></p>
+</section>
+<script>/*NOC_JS*/</script><script id="topo-js">/*TOPO_JS*/</script><!--NOC-END-->

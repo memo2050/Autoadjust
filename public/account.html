@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Account and organization</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}.mut{color:var(--mut)}
+input,select,button{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg);border-color:var(--bd)}button.bad{background:transparent;color:var(--bad);border-color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left;font-size:14px}
+.msg{min-height:20px;font-size:14px}.err{color:var(--bad)}.good{color:var(--ok)}code{background:#0d1428;padding:2px 6px;border-radius:6px;word-break:break-all}
+a{color:var(--acc)}.hide{display:none}
+</style></head><body><main>
+<h1>Auto Adjust account</h1>
+<p class="mut">Sign in to use the SOC and NOC with your own organization. Your organization's data is separate from every other organization's.</p>
+<div id="cfgmsg" class="msg err"></div>
+
+<section id="auth" class="card hide">
+  <h2>Sign in or create an account</h2>
+  <form id="authform"><div class="row"><input id="em" type="email" autocomplete="email" placeholder="Email" required><input id="pw" type="password" autocomplete="current-password" placeholder="Password (10+ characters)" minlength="10" required></div>
+  <div class="row"><button type="submit" id="signin">Sign in</button><button type="button" class="sec" id="signup">Create account</button></div></form>
+  <div id="authmsg" class="msg"></div>
+</section>
+
+<section id="app" class="hide">
+  <div class="card"><div class="row"><b id="who"></b><span class="mut" id="orgline"></span><span style="flex:1"></span><button class="sec" id="out">Sign out</button></div>
+    <div class="row"><button id="opensoc">Open SOC</button><button id="opennoc" class="sec">Open NOC</button><button id="openagents" class="sec" onclick="location.href='/agents.html'">Agents and execution</button></div>
+    <div class="mut">Opening the SOC or NOC passes your sign-in to the existing pages. They then show only your organization's data.</div></div>
+
+  <div class="card"><h2>Your organizations</h2><div id="orgs"></div>
+    <form id="neworg" class="row"><input id="onm" placeholder="New organization name" required minlength="2"><input id="osl" placeholder="address (e.g. acme-corp)" pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"><button type="submit">Create</button></form><div id="orgmsg" class="msg"></div></div>
+
+  <div class="card"><h2>Join with an invitation</h2><form id="acc" class="row"><input id="itok" placeholder="Invitation token" required style="flex:1"><button type="submit">Join</button></form><div id="accmsg" class="msg"></div></div>
+
+  <div id="admin" class="hide">
+    <div class="card"><h2>Members</h2><div id="members"></div></div>
+    <div class="card"><h2>Invite a person</h2><form id="invf" class="row"><input id="iem" type="email" placeholder="Email" required><select id="irole"><option value="security_analyst">Security analyst</option><option value="noc_operator">NOC operator</option><option value="executive_readonly">Executive (read-only)</option><option value="it_admin">IT administrator</option></select><button type="submit">Create invitation</button></form><div id="invmsg" class="msg"></div><div id="invlist"></div></div>
+    <div class="card"><h2>Collector API keys</h2><p class="mut">Use one key per collector (Windows, Wazuh, Zabbix bridge). A key can only send data for this organization. It is shown once.</p><form id="keyf" class="row"><input id="knm" placeholder="Name, e.g. HQ domain controllers" required minlength="2"><button type="submit">Create key</button></form><div id="keymsg" class="msg"></div><div id="keylist"></div></div>
+  </div>
+</section>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)}, S={cfg:null,ses:null,orgs:[],cur:null};
+function el(t,a,k){var e=document.createElement(t);if(a)for(var x in a){if(x==="text")e.textContent=a[x];else if(x==="onclick")e.onclick=a[x];else e.setAttribute(x,a[x])}(k||[]).forEach(function(c){e.appendChild(c)});return e}
+function say(id,t,c){var m=$(id);m.textContent=t||"";m.className="msg "+(c||"")}
+function save(){try{sessionStorage.setItem("aaSession",JSON.stringify(S.ses));sessionStorage.setItem("socToken",S.ses.access_token)}catch(e){}}
+function load(){try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){S.ses=null}}
+async function gt(path,body,tok){var r=await fetch(S.cfg.url+"/auth/v1/"+path,{method:body&&body._m||"POST",headers:{apikey:S.cfg.anonKey,"content-type":"application/json",authorization:"Bearer "+(tok||S.cfg.anonKey)},body:JSON.stringify(body&&body._b||body)});var j=await r.json().catch(function(){return{}});if(!r.ok)throw new Error(j.msg||j.error_description||j.message||"Request failed ("+r.status+")");return j}
+async function api(method,path,body){var h={authorization:"Bearer "+S.ses.access_token,"content-type":"application/json"};if(S.cur)h["x-org-id"]=S.cur;var r=await fetch("/api/soc/"+path,{method:method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});var j=await r.json().catch(function(){return{}});if(!r.ok){var e=new Error(j.error||("Request failed ("+r.status+")"));e.status=r.status;e.body=j;throw e}return j}
+async function refresh(){if(!S.ses||!S.ses.refresh_token)return;try{S.ses=await gt("token?grant_type=refresh_token",{refresh_token:S.ses.refresh_token});save()}catch(e){S.ses=null;try{sessionStorage.removeItem("aaSession")}catch(x){}}}
+async function enter(){
+  if(!S.ses){$("auth").classList.remove("hide");$("app").classList.add("hide");return}
+  $("auth").classList.add("hide");$("app").classList.remove("hide");$("who").textContent=(S.ses.user&&S.ses.user.email)||"Signed in";
+  var m=await api("GET","org/mine");S.orgs=m.organizations;
+  var pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org;
+  S.cur=(S.orgs.find(function(o){return o.id===S.cur})||S.orgs.find(function(o){return o.id===pref})||S.orgs[0]||{}).id||null;
+  paintOrgs();await paintAdmin();
+}
+function paintOrgs(){
+  var box=$("orgs");box.textContent="";if(!S.orgs.length){box.appendChild(el("p",{class:"mut",text:"You are not in an organization yet. Create one below or join with an invitation."}));$("orgline").textContent="";return}
+  var t=el("table");S.orgs.forEach(function(o){var cur=o.id===S.cur;t.appendChild(el("tr",0,[el("td",{text:o.name}),el("td",{class:"mut",text:o.role.replace(/_/g," ")}),el("td",0,[cur?el("span",{class:"good",text:"In use"}):el("button",{class:"sec",text:"Use this",onclick:function(){useOrg(o.id)}})])]))});box.appendChild(t);
+  var c=S.orgs.find(function(o){return o.id===S.cur});$("orgline").textContent=c?"· "+c.name+" ("+c.role.replace(/_/g," ")+")":"";
+}
+async function useOrg(id){S.cur=id;try{var u=await gt("user",{_m:"PUT",_b:{data:{active_org:id}}},S.ses.access_token);S.ses.user=u}catch(e){}await refresh();save();await enter()}
+async function paintAdmin(){
+  var c=S.orgs.find(function(o){return o.id===S.cur});$("admin").classList.toggle("hide",!c);if(!c)return;
+  var isAdm=c.role==="owner"||c.role==="it_admin",isOwn=c.role==="owner";
+  try{var m=await api("GET","org/members");var box=$("members");box.textContent="";var t=el("table");
+    m.members.forEach(function(x){var tr=el("tr");tr.appendChild(el("td",{text:x.userId===m.you?"You":x.userId.slice(0,8)+"…"}));
+      if(isOwn&&x.userId!==m.you){var sel=el("select");["owner","it_admin","noc_operator","security_analyst","executive_readonly"].forEach(function(r){var o=el("option",{value:r,text:r.replace(/_/g," ")});if(r===x.role)o.selected=true;sel.appendChild(o)});sel.onchange=function(){api("PATCH","org/members/"+x.userId,{role:sel.value}).then(paintAdmin).catch(function(e){alert(e.message);paintAdmin()})};tr.appendChild(el("td",0,[sel]));tr.appendChild(el("td",0,[el("button",{class:"bad",text:"Remove",onclick:function(){if(confirm("Remove this member?"))api("DELETE","org/members/"+x.userId).then(paintAdmin).catch(function(e){alert(e.message)})}})]))}
+      else{tr.appendChild(el("td",{class:"mut",text:x.role.replace(/_/g," ")}));tr.appendChild(el("td"))}t.appendChild(tr)});box.appendChild(t)}catch(e){}
+  $("invf").classList.toggle("hide",!isAdm);$("keyf").classList.toggle("hide",!isAdm);
+  if(isAdm){try{var iv=await api("GET","org/invitations");var il=$("invlist");il.textContent="";iv.invitations.forEach(function(i){il.appendChild(el("div",{class:"row"},[el("span",{text:i.email+" · "+i.role.replace(/_/g," ")+(i.acceptedAt?" · joined":" · pending")}),el("button",{class:"sec",text:"Revoke",onclick:function(){api("DELETE","org/invitations/"+i.id).then(paintAdmin)}})]))})}catch(e){}
+    try{var k=await api("GET","org/keys");var kl=$("keylist");kl.textContent="";k.keys.forEach(function(x){kl.appendChild(el("div",{class:"row"},[el("span",{text:x.name+" · "+x.prefix+"… · "+(x.revokedAt?"revoked":x.lastUsedAt?"last used "+x.lastUsedAt.slice(0,10):"never used")}),x.revokedAt?el("span"):el("button",{class:"bad",text:"Revoke",onclick:function(){if(confirm("Revoke this key? Collectors using it stop working."))api("DELETE","org/keys/"+x.id).then(paintAdmin)}})]))})}catch(e){}}
+}
+$("authform").onsubmit=async function(ev){ev.preventDefault();say("authmsg","Signing in…");try{S.ses=await gt("token?grant_type=password",{email:$("em").value.trim(),password:$("pw").value});save();say("authmsg","");await enter()}catch(e){say("authmsg",e.message,"err")}};
+$("signup").onclick=async function(){say("authmsg","Creating account…");try{var r=await gt("signup",{email:$("em").value.trim(),password:$("pw").value});if(r.access_token){S.ses=r;save();await enter()}else say("authmsg","Check your email to confirm your account, then sign in.","good")}catch(e){say("authmsg",e.message,"err")}};
+$("out").onclick=function(){try{sessionStorage.removeItem("aaSession");sessionStorage.removeItem("socToken")}catch(e){}S.ses=null;enter()};
+$("neworg").onsubmit=async function(ev){ev.preventDefault();say("orgmsg","Creating…");try{var b={name:$("onm").value.trim()};if($("osl").value.trim())b.slug=$("osl").value.trim();var o=await api("POST","org/create",b);S.cur=o.id;say("orgmsg","Created.","good");$("neworg").reset();await useOrg(o.id)}catch(e){say("orgmsg",e.message,"err")}};
+$("acc").onsubmit=async function(ev){ev.preventDefault();say("accmsg","Joining…");try{var r=await api("POST","org/invitations/accept",{token:$("itok").value.trim()});say("accmsg","Joined "+r.organization.name+".","good");$("acc").reset();await useOrg(r.organization.id)}catch(e){say("accmsg",e.message,"err")}};
+$("invf").onsubmit=async function(ev){ev.preventDefault();say("invmsg","Creating…");try{var r=await api("POST","org/invitations",{email:$("iem").value.trim(),role:$("irole").value});$("invmsg").textContent="";$("invmsg").className="msg good";$("invmsg").appendChild(document.createTextNode("Send this token to "+r.email+" over a secure channel (shown once): "));$("invmsg").appendChild(el("code",{text:r.token}));$("invf").reset();paintAdmin()}catch(e){say("invmsg",e.message,"err")}};
+$("keyf").onsubmit=async function(ev){ev.preventDefault();say("keymsg","Creating…");try{var r=await api("POST","org/keys",{name:$("knm").value.trim()});$("keymsg").textContent="";$("keymsg").className="msg good";$("keymsg").appendChild(document.createTextNode("Copy this key now (shown once): "));$("keymsg").appendChild(el("code",{text:r.key}));$("keyf").reset();paintAdmin()}catch(e){say("keymsg",e.message,"err")}};
+function go(h){return async function(){if(S.ses){await refresh();save()}location.href="/"+h}}
+$("opensoc").onclick=go("#/soc");$("opennoc").onclick=go("#/noc");
+fetch("/api/auth/config").then(function(r){return r.json()}).then(async function(c){S.cfg=c;if(!c.configured){say("cfgmsg","Sign-in is not configured on this server yet (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are missing).","err");return}load();if(S.ses)await refresh();try{await enter()}catch(e){say("cfgmsg",e.message,"err")}}).catch(function(){say("cfgmsg","Could not load sign-in settings.","err")});
+})();
+</script></main></body></html>
