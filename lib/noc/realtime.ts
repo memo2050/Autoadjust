@@ -4,6 +4,7 @@
 //  * Metric back below the warning threshold         -> event resolved, incident resolved by FRESH DATA (onResolved).
 //  * A device that stops reporting                   -> "No data from X" event + incident, resolved when data returns.
 //  * Every sample is stored (noc_metrics) so history, charts and availability % are computed from stored data only.
+import { admitDevices } from "./limits";
 import type { Store } from "../soc/store";
 import { bwUtil, deviceStatus, ingestTelemetry, NOC_TABLE, NOC_THRESHOLDS, type NocDevice } from "../soc/noc";
 import { hid, rid } from "../soc/util";
@@ -43,6 +44,16 @@ async function openOrUpdate(c: Ctx, dev: NocDevice, cd: Cond, stamp: string) {
 
 /** Stores the telemetry, keeps history, and opens/resolves events + incidents from what the data says. */
 export async function ingestAndEvaluate(c: Ctx, body: any) {
+  let skipped: string[] = [], lim: number | null = null;
+  if (c.deviceMax != null) {                                    // plan device limit (only when billing is enforced): refuse NEW devices beyond it, never block existing ones
+    const list = Array.isArray(body) ? body : body?.devices;
+    if (Array.isArray(list) && list.length && list.length <= 500) {
+      const idOf = (x: any) => String(x?.id ?? x?.name ?? "").trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+      const adm = await admitDevices(c.store, list.map(idOf).filter(Boolean), c.deviceMax); skipped = adm.skipped; lim = adm.limit;
+      if (skipped.length) { const kept = list.filter((x: any) => !idOf(x) || adm.allowed.has(idOf(x))); body = Array.isArray(body) ? kept : { ...body, devices: kept };
+        if (!kept.length) return { received: 0, devices: [], eventsOpened: 0, eventsResolved: 0, stored: 0, deviceLimit: lim, deviceLimitSkipped: skipped.length, skippedDevices: skipped.slice(0, 50) }; }
+    }
+  }
   const res = await ingestTelemetry(c.store, body, c.actor.name), stamp = new Date(T(c)).toISOString();
   let opened = 0, resolved = 0; const rows: any[] = [];
   for (const o of res.devices) {
@@ -56,7 +67,7 @@ export async function ingestAndEvaluate(c: Ctx, body: any) {
     if (dev.up) { const down = await c.store.get<NocEvent>(NT.events, hid("nev", `tel|${dev.id}|down`)); if (down && down.status === "problem") { down.status = "resolved"; down.resolvedAt = stamp; await c.store.upsert(NT.events, [down]); await onResolved(c, down, "Fresh telemetry shows the device is up again."); resolved++; } }
   }
   if (rows.length) await c.store.upsert(NT.metrics, rows);
-  return { ...res, eventsOpened: opened, eventsResolved: resolved, stored: rows.length };
+  return { ...res, eventsOpened: opened, eventsResolved: resolved, stored: rows.length, ...(skipped.length ? { deviceLimit: lim, deviceLimitSkipped: skipped.length, skippedDevices: skipped.slice(0, 50) } : {}) };
 }
 
 /** Devices fed by native agents/collectors (not by a monitoring source) that stopped reporting. Run on every overview request and by a scheduler. */

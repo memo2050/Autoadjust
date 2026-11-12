@@ -9,7 +9,7 @@ import { handleSoc } from "../lib/soc/api";
 import { verifyWebhook, stripeMode } from "../lib/billing/stripe";
 import { effectivePlan, planForPrice } from "../lib/billing/plans";
 
-process.env.SUPABASE_JWT_SECRET = "test-jwt-secret-test-jwt-secret-1234567890"; delete process.env.SOC_ADMIN_TOKEN;
+process.env.SUPABASE_JWT_SECRET = "test-jwt-secret-test-jwt-secret-1234567890"; delete process.env.SOC_ADMIN_TOKEN; process.env.BILLING_ENFORCE = "1";   // this file tests ENFORCED limits; the not-enforced default is covered in tests/plan-limits.test.ts
 const KEY = "sk_test_" + "A1b2C3d4E5f6G7h8", WHSEC = "whsec_" + "unitTestSecret0123456789";
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const jwt = (sub: string, email: string) => { const h = b64({ alg: "HS256", typ: "JWT" }), p = b64({ sub, email, role: "authenticated", aud: "authenticated", exp: Math.floor(Date.now() / 1000) + 3600 }); return `${h}.${p}.${createHmac("sha256", process.env.SUPABASE_JWT_SECRET!).update(`${h}.${p}`).digest("base64url")}`; };
@@ -28,7 +28,7 @@ async function world() {
   await s.upsert("organizations", [{ id: ORG_A, name: "Org A", slug: "org-a", plan: "free" }, { id: ORG_B, name: "Org B", slug: "org-b", plan: "free" }] as any);
   const m = (o: string, u: string, r: string) => s.upsert("org_members", [{ orgId: o, userId: u, role: r }] as any, "org_id,user_id");
   await m(ORG_A, U.owner, "owner"); await m(ORG_A, U.noc, "noc_operator"); await m(ORG_B, U.bOwner, "owner");
-  const env = { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: WHSEC, STRIPE_PRICE_PRO: "price_test_pro", STRIPE_PRICE_ENTERPRISE: "price_test_ent", APP_URL: "https://app.autoadjust.test", STRIPE_API_BASE: f.base } as Record<string, string>;
+  const env = { STRIPE_SECRET_KEY: KEY, STRIPE_WEBHOOK_SECRET: WHSEC, STRIPE_PRICE_PRO: "price_test_pro", STRIPE_PRICE_ENTERPRISE: "price_test_ent", APP_URL: "https://app.autoadjust.test", STRIPE_API_BASE: f.base, BILLING_ENFORCE: "1" } as Record<string, string>;
   const call = (method: string, p: string, t: string | null, b?: unknown, e = env) => handleSoc(new Request("http://x/api/soc/" + p, { method, headers: { ...(t ? { authorization: "Bearer " + t } : {}), "content-type": "application/json" }, body: b === undefined ? undefined : JSON.stringify(b) }), p.split("/"), { store: s, model: null, env: e } as any);
   const hook = (ev: any, e = env, header?: string) => { const body = JSON.stringify(ev); return handleSoc(new Request("http://x/api/soc/billing/webhook", { method: "POST", headers: header === undefined ? { "stripe-signature": sign(body, e.STRIPE_WEBHOOK_SECRET) } : { "stripe-signature": header }, body }), ["billing", "webhook"], { store: s, model: null, env: e } as any); };
   return { f, s, tok, env, call, hook };
@@ -104,8 +104,9 @@ test("portal: owner only, needs an existing customer; plan limits are enforced o
   const w = await world(); try {
     assert.equal((await w.call("POST", "billing/portal", w.tok.owner)).status, 404); await w.call("POST", "billing/checkout", w.tok.owner, { plan: "pro" });
     assert.equal((await w.call("POST", "billing/portal", w.tok.noc)).status, 403); assert.equal((await w.call("POST", "billing/portal", w.tok.owner)).status, 200);
-    const codes: number[] = []; for (let i = 0; i < 6; i++) codes.push((await w.call("POST", "org/keys", w.tok.owner, { name: "key-" + i })).status);
-    assert.deepEqual(codes, [201, 201, 201, 201, 201, 402], "free plan = 5 keys"); await w.hook(sub(ORG_A, { customer: ((await w.s.select<any>("org_billing", {}))[0]).customerId }));
+    await w.s.upsert("org_api_keys", Array.from({ length: 25 }, (_, i) => ({ id: randomUUID(), orgId: ORG_A, name: "seed-" + i, keyHash: "h" + i, prefix: "aa_live_x", role: "analyst" })) as any);
+    assert.equal((await w.call("POST", "org/keys", w.tok.owner, { name: "key-over" })).status, 402, "free plan = 25 keys per organization");
+    await w.hook(sub(ORG_A, { customer: ((await w.s.select<any>("org_billing", {}))[0]).customerId }));
     assert.equal((await w.call("POST", "org/keys", w.tok.owner, { name: "key-after-upgrade" })).status, 201, "upgrade lifts the limit");
   } finally { w.f.close(); }
 });

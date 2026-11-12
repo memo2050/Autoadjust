@@ -5,7 +5,7 @@ import { audit, HttpError } from "../soc/pipeline";
 import { ScopedStore, UUID_RE } from "../tenant/scoped-store";
 import type { Principal } from "../tenant/auth";
 import { assertConfigured, stripeMode, stripePost, verifyWebhook } from "./stripe";
-import { effectivePlan, PLAN_LIMITS, planForPrice, type Entitlements, type PlanId } from "./plans";
+import { billingEnforced, effectivePlan, PLAN_LIMITS, planForPrice, type Entitlements, type PlanId } from "./plans";
 
 export interface BillingRow { orgId: string; customerId?: string | null; subscriptionId?: string | null; plan: string; status: string; currentPeriodEnd?: string | null; cancelAtPeriodEnd?: boolean; lastEventAt?: number; updatedAt?: string }
 const TB = "org_billing", TE = "billing_events";
@@ -14,16 +14,20 @@ const SYSTEM = { name: "stripe-webhook", role: "system" };
 const getRow = async (raw: Store, orgId: string) => { try { return (await raw.select<BillingRow>(TB, { where: { orgId }, limit: 1 }))[0] ?? null; } catch { return null; } };
 const saveRow = (raw: Store, r: BillingRow) => raw.upsert(TB, [{ ...r, updatedAt: new Date().toISOString() } as any], "org_id");
 
-export async function getEntitlements(raw: Store, orgId: string, now = Date.now()): Promise<Entitlements> {
-  const plan = effectivePlan(await getRow(raw, orgId), now); return { plan, ...PLAN_LIMITS[plan] };
+export async function getEntitlements(raw: Store, orgId: string, now = Date.now(), env: Record<string, string | undefined> = process.env): Promise<Entitlements> {
+  const plan = effectivePlan(await getRow(raw, orgId), now);
+  if (!billingEnforced(env)) return { plan, enforced: false, maxExecutors: null, maxApiKeys: null, maxDevices: null, retentionDays: null, aiAnalyst: true };
+  return { plan, enforced: true, ...PLAN_LIMITS[plan] };
 }
-export async function requireRoom(raw: Store, orgId: string, what: "executors" | "keys", current: number) {
-  const e = await getEntitlements(raw, orgId), max = what === "executors" ? e.maxExecutors : e.maxApiKeys;
-  if (current >= max) throw new HttpError(402, `Your ${e.plan} plan allows ${max} ${what === "executors" ? "executors" : "API keys"}. Upgrade the subscription to add more.`);
+export async function requireRoom(raw: Store, orgId: string, what: "executors" | "keys", current: number, env: Record<string, string | undefined> = process.env) {
+  const e = await getEntitlements(raw, orgId, Date.now(), env), max = what === "executors" ? e.maxExecutors : e.maxApiKeys;
+  if (max !== null && current >= max) throw new HttpError(402, `Your ${e.plan} plan allows ${max} ${what === "executors" ? "executors" : "API keys"}. Upgrade the subscription to add more.`);
 }
-export async function status(raw: Store, orgId: string) {
-  const b = await getRow(raw, orgId), e = await getEntitlements(raw, orgId);
-  return { configured: !!stripeMode(), mode: stripeMode(), plan: e.plan, entitlements: e, subscription: b ? { status: b.status, currentPeriodEnd: b.currentPeriodEnd ?? null, cancelAtPeriodEnd: !!b.cancelAtPeriodEnd } : null };
+/** Monitored-device limit for the organization, or null (unlimited / not enforced). Only NEW devices are ever refused; existing ones are never touched. */
+export const deviceLimit = async (raw: Store, orgId: string, env: Record<string, string | undefined> = process.env) => (await getEntitlements(raw, orgId, Date.now(), env)).maxDevices;
+export async function status(raw: Store, orgId: string, env: Record<string, string | undefined> = process.env) {
+  const b = await getRow(raw, orgId), e = await getEntitlements(raw, orgId, Date.now(), env);
+  return { configured: !!stripeMode(env), mode: stripeMode(env), plan: e.plan, enforced: e.enforced, entitlements: e, planLimits: PLAN_LIMITS[e.plan], subscription: b ? { status: b.status, currentPeriodEnd: b.currentPeriodEnd ?? null, cancelAtPeriodEnd: !!b.cancelAtPeriodEnd } : null };
 }
 function ownerOnly(p: Principal) { if (p.kind !== "user" || p.orgRole !== "owner") throw new HttpError(403, "Only an organization owner can manage billing."); }
 function returnUrl(body: any, env: Record<string, string | undefined>): string {

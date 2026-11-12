@@ -18,3 +18,20 @@
 4. Settings → Billing → Customer portal → activate.
 5. Set `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE`, `APP_URL` (dev). Apply `0109_billing.sql` to the **dev** database only.
 6. As an owner: start checkout with card `4242 4242 4242 4242`; confirm status becomes `pro`; open portal and cancel; confirm return to `free`; try `4000 0000 0000 0341` (payment fails) and confirm behaviour. Record results.
+
+## Plan limits, device limits and data retention (opt-in)
+
+**Nothing is limited or deleted unless `BILLING_ENFORCE=1` is set on the server.** With it unset (default) every limit is "unlimited", `GET /api/soc/billing/status` reports `enforced:false`, and existing organizations behave exactly as before.
+
+When enforced, limits are **per organization**:
+
+| | Free | Pro | Enterprise |
+|---|---|---|---|
+| API keys | 25 | 100 | 1000 (raise per contract) |
+| Executors | 3 | 50 | 1000 |
+| Monitored devices | 25 | 500 | 100000 |
+| Metric retention | 7 days | 30 days | 365 days |
+
+* **Devices:** only *new* devices beyond the limit are refused (telemetry ingest and Zabbix sync). Existing devices keep updating even if the org is already over the limit; nothing is ever removed. The response lists `deviceLimitSkipped` / `skippedDevices`.
+* **Retention:** `POST /api/soc/noc/retention` is a **dry run** (report only) by default. `{ "apply": true }` deletes old `noc_metrics` samples only, requires enforcement to be on, is audited, and is capped at 5000 rows per call. The audit log, events, incidents and evidence are never touched. Nothing runs automatically.
+* Enabling enforcement: set `BILLING_ENFORCE=1` only after reviewing which organizations exceed the limits (the dry run and `billing/status` show this).

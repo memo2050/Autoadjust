@@ -8,9 +8,10 @@ import type { ModelFn } from "../soc/agents";
 import { cryptoConfigured, decryptJson, encryptJson } from "./crypto";
 import { assertSafeTarget, type Resolver } from "../tenant/ssrf";
 import { executeScript, fetchSnapshot, fromErr, testConnection, zSeverity, type Fetcher, type ZConf, type ZHost, type ZProblem } from "./zabbix";
+import { admitDevices } from "./limits";
 import { NT, type Activity, type AgentKey, type AutoAction, type Approval, type Execution, type Iface, type NocEvent, type NocIncident, type Recommendation, type Source, type SourceStatus, type SourceType, type WfStep, type Workflow } from "./types";
 
-export interface Ctx { store: Store; actor: Actor; fetcher?: Fetcher; model?: ModelFn | null; now?: () => number; resolver?: Resolver }
+export interface Ctx { store: Store; actor: Actor; fetcher?: Fetcher; model?: ModelFn | null; now?: () => number; resolver?: Resolver; /** monitored-device limit for this organization (null/undefined = unlimited) */ deviceMax?: number | null }
 const T = (c: Ctx) => (c.now ? c.now() : Date.now());
 const iso = (c: Ctx) => new Date(T(c)).toISOString();
 const SOURCE_TYPES: SourceType[] = ["zabbix", "prometheus", "grafana", "snmp", "syslog", "http", "icmp", "generic"];
@@ -73,7 +74,9 @@ export async function syncSource(c: Ctx, id: string) {
 const n1 = (v: number | undefined) => (v == null ? undefined : Math.round(v * 10) / 10);
 export async function applySnapshot(c: Ctx, s: Source, hosts: ZHost[], problems: ZProblem[]) {
   const t = iso(c), stamp = T(c); let ifaces = 0, newEvents = 0, incidents = 0;
+  const adm = await admitDevices(c.store, hosts.map((h) => h.id), c.deviceMax); let deviceLimitSkipped = adm.skipped.length;
   for (const h of hosts) {
+    if (!adm.allowed.has(h.id)) continue;                      // new device beyond the plan's device limit: not added (existing devices are never blocked)
     const prev = await c.store.get<NocDevice>(NOC_TABLE, h.id);
     const bwIn = h.interfaces.reduce((a, i) => a + (i.inBps ?? 0), 0) / 1e6, bwOut = h.interfaces.reduce((a, i) => a + (i.outBps ?? 0), 0) / 1e6, haveBw = h.interfaces.some((i) => i.inBps != null || i.outBps != null);
     const cap = h.interfaces.reduce((a, i) => a + (i.speedBps ?? 0), 0) / 1e6;
@@ -102,7 +105,7 @@ export async function applySnapshot(c: Ctx, s: Source, hosts: ZHost[], problems:
   const wasDown = s.disconnectedAt; s.disconnectedAt = undefined; await c.store.upsert(NT.sources, [s]);
   if (wasDown) await recoverSource(c, s);
   await checkVerifying(c, stamp);
-  return { hosts: hosts.length, interfaces: ifaces, newEvents, incidentsOpened: incidents, at: t };
+  return { hosts: hosts.length - deviceLimitSkipped, interfaces: ifaces, newEvents, incidentsOpened: incidents, at: t, ...(deviceLimitSkipped ? { deviceLimit: adm.limit, deviceLimitSkipped, skippedDevices: adm.skipped.slice(0, 50) } : {}) };
 }
 /** Marks sources that stopped delivering data as DISCONNECTED and records it once as an event and an incident. */
 export async function sweepSources(c: Ctx) {

@@ -1,4 +1,5 @@
 import * as BILL from "../billing/service";
+import { pruneMetrics as prune } from "../noc/limits";
 import { getStore, T, type Store } from "./store";
 import type { Alert, Asset, AuditEntry, DataSource, Incident, IncidentStatus, ScanImport, SocAction, SocEvent, Role, TimelineEntry, Vuln, AgentRun } from "./types";
 import { AGENT_IDS, sevRank } from "./types";
@@ -73,7 +74,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
 
     if (a === "billing") {
       const env = (deps as any).env ?? process.env;
-      if (b === "status" && m === "GET") { need("read"); return json(await BILL.status(raw, pr.orgId)); }
+      if (b === "status" && m === "GET") { need("read"); return json(await BILL.status(raw, pr.orgId, env)); }
       if (b === "checkout" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createCheckout(raw, pr, await readJson(req), env)); }
       if (b === "portal" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createPortal(raw, pr, env)); }
       return json({ error: "Not found" }, 404);
@@ -98,12 +99,12 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
 
     if (a === "me" && m === "GET") return json({ actor: actor.name, role, orgRole: pr.orgRole ?? null, organization: { id: pr.orgId, name: pr.orgName ?? null }, auth: pr.kind, dev: pr.kind === "dev", store: store.kind, aiConfigured: !!(deps.model !== undefined ? deps.model : defaultModel()) });
 
-    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
+    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
     const xc: XJ.ExecCtx = { store, actor, orgId: pr.orgId, pr };
     if (a === "noc" && b === "executor" && c === "jobs" && !path[3] && m === "GET") { need("ingest"); rate(actor.name + ":xpoll", 120); return json(await XJ.pollJobs(xc, String(u.searchParams.get("host") ?? ""))); }
     if (a === "noc" && b === "executor" && c === "jobs" && path[3] && path[4] === "result" && m === "POST") { need("ingest"); rate(actor.name + ":xres", 120); return json(await XJ.acceptResult(xc, path[3], await readJson(req))); }
     if (a === "noc" && ["alerts", "push", "executions", "scans", "changes"].includes(b ?? "") && !(["executions", "scans", "changes"].includes(b ?? "") && m === "GET" && c !== "pending") && !(["scans", "changes"].includes(b ?? "") && m === "POST" && !path[3] ) && !(b === "changes" && c && ["approve", "reject", "rollback"].includes(path[3] ?? ""))) {
-      const nc: N.Ctx = { store, actor, model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
+      const nc: N.Ctx = { store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
       if (b === "scans" && c === "pending" && m === "GET") { need("ingest"); return json(await TP.claimScan(nc, String(u.searchParams.get("agent") ?? actor.name))); }
       if (b === "scans" && c && path[3] === "progress" && m === "POST") { need("ingest"); rate(actor.name + ":scanp", 240); return json(await TP.reportScan(nc, c, await readJson(req))); }
       if (b === "scans" && c && path[3] === "complete" && m === "POST") { need("ingest"); return json(await TP.finishScan(nc, c, await readJson(req))); }
@@ -138,7 +139,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       return json(await analyzeSoc(store, { incidentId: body?.incidentId, proposeDiagnostics: body?.proposeDiagnostics === true ? prop : undefined }, actor, deps.model !== undefined ? deps.model : defaultModel()));
     }
     if (a === "noc") {
-      const nc: N.Ctx = { store, actor, model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
+      const nc: N.Ctx = { store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
       const canDiag = allowed(pr, "write", "noc") || allowed(pr, "write", "soc");
 
       const proposer = (agent: string, incidentId?: string) => async (list: any[]) => { const out: any[] = []; for (const d of list.slice(0, 5)) { try { const j = await XJ.requestDiag({ ...xc, actor: { name: agent, role: "agent" } }, { hostId: d.hostId, template: d.template, params: d.params, reason: d.why, incidentId }); out.push({ ...d, status: "proposed_awaiting_human", jobId: j.id }); } catch (e: any) { out.push({ ...d, why: `${d.why} (not proposed: ${String(e?.message ?? e).slice(0, 120)})` }); } } return out.concat(list.slice(5)); };
@@ -161,6 +162,12 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       if (b === "overview" && m === "GET") { rate(actor.name + ":ov", 240); await N.sweepSources(nc); await RT.sweepDevices(nc); return json(await nocOverview(nc)); }
       if (b === "sources" && !c && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.createSource(nc, await readJson(req)), 201); }
       if (b === "sources" && c && path[3] === "test" && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.testSource(nc, c)); }
+      if (b === "retention" && m === "POST") {                       // dry run by default; deletes only when apply:true AND billing enforcement is on; only old noc_metrics samples
+        need("approve"); rate(actor.name + ":retention", 6); const body: any = await readJson(req), env2 = (deps as any).env ?? process.env, e = await BILL.getEntitlements(raw, pr.orgId, Date.now(), env2);
+        if (body?.apply === true && !e.enforced) throw new HttpError(409, "Plan limits are not enforced on this server, so nothing is pruned. Run without apply for a report.");
+        const r = await prune(store, e.retentionDays, { apply: body?.apply === true });
+        if (r.applied) await audit(store, actor, "noc.retention.prune", pr.orgId, { retentionDays: r.retentionDays, deleted: r.deleted }); return json({ plan: e.plan, enforced: e.enforced, ...r });
+      }
       if (b === "sources" && c && path[3] === "sync" && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.syncSource(nc, c)); }
       if (b === "sources" && c && !path[3] && m === "DELETE") { need("approve"); return json(await N.deleteSource(nc, c)); }
       if (b === "actions" && !c && m === "POST") { need("approve"); return json(await N.createAction(nc, await readJson(req)), 201); }
