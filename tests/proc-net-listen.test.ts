@@ -12,6 +12,8 @@ const SH = readFileSync(new URL("../collector/noc-agent/auto-adjust-linux-agent.
 const FN = SH.slice(SH.indexOf("# BEGIN proc_listen"), SH.indexOf("# END proc_listen"));
 const tmp = mkdtempSync(join(tmpdir(), "aa-pl-")); const FNFILE = join(tmp, "fn.sh"); writeFileSync(FNFILE, FN);
 const run = (dir: string, env: Record<string, string> = { PATH: process.env.PATH! }) => { const r = spawnSync("bash", ["-c", `set -u; source ${FNFILE}; proc_listen "$1"`, "x", dir], { encoding: "utf8", env }); return { rc: r.status, out: r.stdout, err: r.stderr }; };
+// Real kernels label the remote column "rem_address" in tcp/udp but "remote_address" in tcp6/udp6 (found on a GitHub runner, kernel 7.0; the sandbox has no IPv6 proc files).
+const HDR6 = "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
 const HDR4 = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
 const row = (i: number, la: string, st: string, ra = "00000000:0000") => `  ${i}: ${la} ${ra} ${st} 00000000:00000000 00:00000000 00000000     0        0 ${1000 + i} 1 0000000000000000 100 0 0 10 0\n`;
 const mk = (files: Record<string, string>) => { const d = mkdtempSync(join(tmp, "p-")); for (const [k, v] of Object.entries(files)) writeFileSync(join(d, k), v); return d; };
@@ -25,7 +27,7 @@ test("normal IPv4: TCP LISTEN and UDP unconnected only; other states are exclude
   assert.match(r.out, /^# origin: \/proc\/net fallback \(ss is not installed\).*ipv6 files: absent/); assert.match(r.out, /\nNetid State Local-Address:Port\n/);
 });
 test("IPv6: :: and ::1 and a global address decode correctly; v4-mapped is shown in documented uncompressed form", () => {
-  const H6 = HDR4, z = "00000000000000000000000000000000";
+  const H6 = HDR6, z = "00000000000000000000000000000000";
   const d = mk({ tcp: HDR4, udp: HDR4 + row(0, "00000000:0044", "07"), tcp6: H6 + row6(0, z + ":0016", "0A") + row6(1, "00000000000000000000000001000000:0277", "0A") + row6(2, "B80D01200000000000000000" + "01000000:01BB", "0A") + row6(3, "0000000000000000FFFF00000100000A:1F90", "0A"), udp6: H6 + row6(0, z + ":0035", "07") });
   const r = run(d); assert.equal(r.rc, 0, r.out); assert.deepEqual(rows(r.out), ["udp UNCONN 0.0.0.0:68", "tcp LISTEN [::]:22", "tcp LISTEN [::1]:631", "tcp LISTEN [2001:db8:0:0:0:0:0:1]:443", "tcp LISTEN [0:0:0:0:0:ffff:a00:1]:8080", "udp UNCONN [::]:53"]);
   assert.match(r.out, /ipv6 files: present/);
@@ -68,4 +70,10 @@ print("\\n".join(sorted(out)))`;
     const v4mine = new Set([...mine].filter((x) => !x.includes("["))); assert.deepEqual([...v4mine].sort(), [...theirs].sort());
     assert.ok(mine.has(`tcp LISTEN 0.0.0.0:${port}`), "the real listener is listed");
   } finally { srv.close(); }
+});
+
+test("real-kernel IPv6 header (remote_address) is accepted; an unknown column name is still refused", () => {
+  const z = "0".repeat(32), ok4 = HDR4 + row(0, "00000000:0016", "0A");
+  const good = run(mk({ tcp: ok4, udp: HDR4 + row(0, "00000000:0044", "07"), tcp6: HDR6 + row6(0, z + ":0016", "0A"), udp6: HDR6 })); assert.equal(good.rc, 0, good.out); assert.ok(rows(good.out).some((r) => r.includes("[::]:22")), good.out);
+  unsupportedOnly(run(mk({ tcp: ok4, udp: ok4, tcp6: HDR6.replace("remote_address", "peer_address"), udp6: HDR6 })), /unexpected header/);
 });

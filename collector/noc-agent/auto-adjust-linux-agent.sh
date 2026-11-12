@@ -113,7 +113,7 @@ proc_listen() {
     local first=1 want; if [ "$net" = tcp ]; then want="0A"; else want="07"; fi
     while IFS= read -r line || [ -n "$line" ]; do
       read -r sl la ra st rest <<<"$line"
-      if [ "$first" = 1 ]; then first=0; [ "$sl" = "sl" ] && [ "$la" = "local_address" ] && [ "$ra" = "rem_address" ] && [ "$st" = "st" ] || { echo "UNSUPPORTED: unexpected header in $dir/$f"; return 127; }; continue; fi
+      if [ "$first" = 1 ]; then first=0; [ "$sl" = "sl" ] && [ "$la" = "local_address" ] && { [ "$ra" = "rem_address" ] || [ "$ra" = "remote_address" ]; } && [ "$st" = "st" ] || { echo "UNSUPPORTED: unexpected header in $dir/$f"; return 127; }; continue; fi
       [[ "$sl" =~ ^[0-9]+:$ ]] || { echo "UNSUPPORTED: malformed row in $dir/$f"; return 127; }
       case "$f" in *6) [[ "$la" =~ $re6 && "$ra" =~ $re6 ]] || { echo "UNSUPPORTED: malformed address in $dir/$f"; return 127; };; *) [[ "$la" =~ $re4 && "$ra" =~ $re4 ]] || { echo "UNSUPPORTED: malformed address in $dir/$f"; return 127; };; esac
       [[ "$st" =~ $stre ]] || { echo "UNSUPPORTED: malformed state in $dir/$f"; return 127; }
