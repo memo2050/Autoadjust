@@ -21,7 +21,7 @@ createServer(async (req, res) => {
   if (url.pathname.startsWith("/api/soc/")) {
     const chunks: Buffer[] = []; for await (const c of req) chunks.push(c as Buffer);
     const r = await handleSoc(new Request(url, { method: req.method, headers: req.headers as any, body: ["GET", "HEAD"].includes(req.method!) ? undefined : Buffer.concat(chunks) }), url.pathname.slice(9).split("/"), { store, model: mock });
-    res.writeHead(r.status, Object.fromEntries(r.headers)); res.end(Buffer.from(await r.arrayBuffer())); return;
+    const hdrs: Record<string, string> = {}; r.headers.forEach((v, k) => { hdrs[k] = v; }); res.writeHead(r.status, hdrs); res.end(Buffer.from(await r.arrayBuffer())); return;
   }
   const f = join(root, url.pathname === "/" ? "landing.html" : url.pathname);
   if (existsSync(f)) { res.writeHead(200, { "content-type": mime[extname(f)] ?? "application/octet-stream" }); res.end(readFileSync(f)); } else { res.writeHead(404, { "content-type": "text/html" }); res.end("<h1>404</h1>"); }
