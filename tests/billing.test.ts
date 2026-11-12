@@ -76,8 +76,8 @@ test("entitlements: active pro lifts limits; canceled / unpaid / unknown price f
     assert.equal(await plan(), "free"); let t = Math.floor(Date.now() / 1000);
     await w.hook(sub(ORG_A, { created: ++t })); assert.equal(await plan(), "pro");
     await w.hook(sub(ORG_A, { created: ++t, price: "price_UNKNOWN" })); assert.equal(await plan(), "free", "unknown price never grants a paid plan");
-    await w.hook(sub(ORG_A, { created: ++t, status: "past_due" })); assert.equal(await plan(), "pro", "grace until period end");
-    await w.hook(sub(ORG_A, { created: ++t, status: "past_due", end: Math.floor(Date.now() / 1000) - 10 })); assert.equal(await plan(), "free");
+    await w.hook(sub(ORG_A, { created: ++t, status: "past_due" })); assert.equal(await plan(), "pro", "grace until period end (+7 default grace days)");
+    await w.hook(sub(ORG_A, { created: ++t, status: "past_due", end: Math.floor(Date.now() / 1000) - 8 * 86400 })); assert.equal(await plan(), "free");
     await w.hook(sub(ORG_A, { created: ++t, status: "unpaid" })); assert.equal(await plan(), "free");
     await w.hook(sub(ORG_A, { created: ++t })); assert.equal(await plan(), "pro"); await w.hook(sub(ORG_A, { created: ++t, type: "customer.subscription.deleted", status: "canceled" })); assert.equal(await plan(), "free");
     assert.equal(effectivePlan({ plan: "pro", status: "active" }), "pro"); assert.equal(planForPrice("price_x", {}), null);
@@ -92,7 +92,7 @@ test("isolation: an event for org A never changes org B; B cannot see A; unknown
     await w.hook(sub(ORG_A)); const st = async (t: string) => (await (await w.call("GET", "billing/status", t)).json()) as any;
     assert.equal((await st(w.tok.owner)).plan, "pro"); assert.equal((await st(w.tok.bOwner)).plan, "free");
     await w.hook(sub("not-a-uuid", { subId: "sub_2" })); await w.hook(sub("c0000000-0000-4000-8000-0000000000c1", { subId: "sub_3" })); assert.equal((await st(w.tok.bOwner)).plan, "free");
-    assert.equal((await w.s.select("org_billing", {})).length, 1);
+    assert.equal((await w.s.select<any>("org_billing", {})).filter((r: any) => r.subscriptionId).length, 1, "only org A has a subscription (org B merely has a trial record)");
   } finally { w.f.close(); }
 });
 test("a customer id already bound to org A cannot be re-bound by metadata naming org B", async () => {

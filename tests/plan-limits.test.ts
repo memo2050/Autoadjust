@@ -14,8 +14,8 @@ const dev = (n: number, extra = {}) => ({ id: "dev" + n, type: "server", metrics
 const ctx = (raw: TestStore, org: string, deviceMax: number | null) => ({ store: new ScopedStore(raw, org), actor: { name: "t", role: "admin" }, model: null, deviceMax } as any);
 
 test("limits table matches the approved recommendation", () => {
-  assert.deepEqual([PLAN_LIMITS.free.maxApiKeys, PLAN_LIMITS.pro.maxApiKeys], [25, 100]); assert.deepEqual([PLAN_LIMITS.free.maxExecutors, PLAN_LIMITS.pro.maxExecutors], [3, 50]);
-  assert.deepEqual([PLAN_LIMITS.free.maxDevices, PLAN_LIMITS.pro.maxDevices], [25, 500]); assert.deepEqual([PLAN_LIMITS.free.retentionDays, PLAN_LIMITS.pro.retentionDays], [7, 30]);
+  assert.deepEqual([PLAN_LIMITS.free.maxApiKeys, PLAN_LIMITS.pro.maxApiKeys], [25, 100]); assert.deepEqual([PLAN_LIMITS.free.maxExecutors, PLAN_LIMITS.pro.maxExecutors], [3, 10]);
+  assert.deepEqual([PLAN_LIMITS.free.maxDevices, PLAN_LIMITS.pro.maxDevices], [25, 100]); assert.equal(PLAN_LIMITS.free.trialDays, 14); assert.deepEqual([PLAN_LIMITS.free.retentionDays, PLAN_LIMITS.pro.retentionDays], [7, 30]);
 });
 test("flag off (default): every limit is null, status says not enforced, existing orgs unaffected", async () => {
   const s = new TestStore(), e = await getEntitlements(s, A, Date.now(), OFF);

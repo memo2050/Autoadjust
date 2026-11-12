@@ -75,8 +75,27 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     if (a === "billing") {
       const env = (deps as any).env ?? process.env;
       if (b === "status" && m === "GET") { need("read"); return json(await BILL.status(raw, pr.orgId, env)); }
+      if (b === "usage" && m === "GET") { need("read"); return json(await BILL.usage(raw, pr.orgId, env)); }
+      if (b === "invoices" && m === "GET") return json(await BILL.listInvoices(raw, pr));
+      if (b === "payments" && m === "GET") return json(await BILL.listPayments(raw, pr));
       if (b === "checkout" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createCheckout(raw, pr, await readJson(req), env)); }
       if (b === "portal" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createPortal(raw, pr, env)); }
+      if (b === "change" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.changePlan(raw, pr, await readJson(req), env)); }
+      if (b === "cancel" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, true, env)); }
+      if (b === "resume" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, false, env)); }
+      if (b === "admin") {                                                       // platform administrators only (checked again inside every function)
+        rate((pr.userId ?? pr.name) + ":badmin", 60); const o = path[3];
+        if (c === "plans" && !o && m === "GET") return json(await BILL.adminPlans(raw, pr));
+        if (c === "plans" && o && m === "PUT") return json(await BILL.adminUpdatePlan(raw, pr, o, await readJson(req)));
+        if (c === "settings" && m === "PUT") return json(await BILL.adminSettings(raw, pr, await readJson(req)));
+        if (c === "stats" && m === "GET") return json(await BILL.adminStats(raw, pr));
+        if (c === "coupons" && m === "POST") return json(await BILL.adminCreateCoupon(raw, pr, await readJson(req), env));
+        if (c === "orgs" && !o && m === "GET") return json(await BILL.adminOrgs(raw, pr, env));
+        if (c === "orgs" && o && path[4] === "overrides" && m === "PUT") return json(await BILL.adminSetOverrides(raw, pr, o, await readJson(req)));
+        if (c === "orgs" && o && path[4] === "trial" && m === "POST") return json(await BILL.adminGrantTrial(raw, pr, o, await readJson(req)));
+        if (c === "orgs" && o && path[4] === "discount" && m === "POST") return json(await BILL.adminApplyDiscount(raw, pr, o, await readJson(req), env));
+        if (c === "orgs" && o && path[4] === "refund" && m === "POST") return json(await BILL.adminRefund(raw, pr, o, await readJson(req), env));
+      }
       return json({ error: "Not found" }, 404);
     }
     if (a === "org") {

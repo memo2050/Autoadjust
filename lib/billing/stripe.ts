@@ -24,6 +24,11 @@ export async function stripePost(path: string, body: Record<string, string>, ide
   if (!r.ok) throw new HttpError(502, "The payment provider rejected the request" + (j?.error?.code ? ` (${String(j.error.code).slice(0, 60)})` : "") + ".");
   return j;
 }
+export async function stripeGet(path: string, env: Record<string, string | undefined> = process.env): Promise<any> {
+  assertConfigured(env);
+  const r = await fetch(apiBase(env) + path, { method: "GET", headers: { authorization: "Bearer " + env.STRIPE_SECRET_KEY } }); const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) throw new HttpError(502, "The payment provider rejected the request" + (j?.error?.code ? ` (${String(j.error.code).slice(0, 60)})` : "") + "."); return j;
+}
 /** Verifies a Stripe-Signature header against the RAW body. Constant-time; rejects stale timestamps and any malformed header. */
 export function verifyWebhook(raw: string, header: string | null, secret: string | undefined, now = Date.now(), toleranceSec = 300): boolean {
   if (!secret || !header) return false;
