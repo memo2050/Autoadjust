@@ -1,0 +1,3 @@
+// Entry for the in-browser copy of the SOC role tools. Same source files as the server; bundled by scripts/build-browser-engine.sh.
+import { HUNTS, analyzeLogs, csvCell, eventStats, execSummaryMd, hardeningFor, huntEvents, incidentReportMd, parseEventInput, planToCsv, playbookFor, remediationPlan, ruleCatalog, topRisks, validateManualAction } from "../lib/soc/roles";
+(globalThis as any).SocEngine = { HUNTS, analyzeLogs, csvCell, eventStats, execSummaryMd, hardeningFor, huntEvents, incidentReportMd, parseEventInput, planToCsv, playbookFor, remediationPlan, ruleCatalog, topRisks, validateManualAction };

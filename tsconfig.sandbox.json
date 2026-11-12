@@ -1,0 +1,1 @@
+{ "extends": "./tsconfig.soc.json", "compilerOptions": { "typeRoots": ["/opt/node-tools/node_modules/@types"] } }

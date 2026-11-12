@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Billing administration</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e;--warn:#f5b84b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}.mut{color:var(--mut)}
+input,button,select{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg);border-color:var(--bd)}button.bad{background:transparent;color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left;font-size:14px}
+.msg{min-height:20px;font-size:14px}.err{color:var(--bad)}.good{color:var(--ok)}a{color:var(--acc)}.hide{display:none}
+.banner{border-radius:10px;padding:10px 12px;margin:10px 0;border:1px solid var(--warn);color:var(--warn)}.banner.bad{border-color:var(--bad);color:var(--bad)}.banner.info{border-color:var(--bd);color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.plan{border:1px solid var(--bd);border-radius:12px;padding:14px}.plan.cur{border-color:var(--acc)}.price{font-size:24px;font-weight:600}
+.bar{height:8px;background:#0d1428;border-radius:6px;overflow:hidden;margin:4px 0}.bar>i{display:block;height:100%;background:var(--acc)}.bar>i.full{background:var(--bad)}.bar>i.near{background:var(--warn)}
+ul{padding-left:18px;margin:8px 0}
+</style></head><body><main>
+<h1>Billing administration</h1>
+<p class="mut"><a href="/billing.html">← Organization billing</a> · Platform administrators only. Stripe runs in test mode in development.</p>
+<div id="top" class="msg err"></div>
+<div id="app" class="hide">
+  <div class="card"><h2>Subscriptions and revenue</h2><div id="stats"></div></div>
+  <div class="card"><h2>Plans and limits</h2><p class="mut">Changes apply to every organization on that plan. Lowering a limit never deletes existing devices, keys or data; it only stops new ones. Limits take effect only when billing enforcement is switched on for the server.</p><div id="plans" class="grid"></div><div id="planmsg" class="msg"></div>
+    <div class="row"><label class="mut">Grace period for failed payments (days)</label><input id="grace" type="number" min="0" max="90" style="width:90px"><button id="savegrace">Save</button></div></div>
+  <div class="card"><h2>Enforcement preview (read-only)</h2><p class="mut">What would happen to each organization if plan limits were switched on today. This page changes nothing.</p><div id="preview"><span class="mut">Loading…</span></div></div>
+  <div class="card"><h2>Organizations</h2><div id="orgs"></div></div>
+  <div class="card hide" id="manage"><h2 id="mtitle"></h2>
+    <div class="row"><b>Custom limits</b><span class="mut">(blank = leave as is; "none" = unlimited)</span></div>
+    <div class="row"><input id="ovd" placeholder="Devices"><input id="ovk" placeholder="API keys"><input id="ove" placeholder="Executors"><input id="ovr" placeholder="Retention days"><button id="saveov">Save limits</button><button id="resetov" class="sec">Reset to plan</button></div>
+    <div class="row"><b>Promotional trial</b><input id="tdays" type="number" min="1" max="365" placeholder="Days" style="width:90px"><button id="granttrial">Grant</button></div>
+    <div class="row"><b>Discount</b><input id="cpct" type="number" min="1" max="100" placeholder="% off" style="width:90px"><select id="cdur"><option value="once">once</option><option value="repeating">repeating</option><option value="forever">forever</option></select><input id="cmon" type="number" min="1" max="36" placeholder="Months" style="width:90px"><button id="mkcoupon" class="sec">Create coupon</button></div>
+    <div class="row"><input id="cid" placeholder="Coupon id"><button id="applyc">Apply to this organization</button></div>
+    <div class="row"><b>Refund</b><input id="rpay" placeholder="Payment id (pi_…)"><input id="ramt" type="number" min="1" placeholder="Amount in cents (blank = full)" style="width:200px"><button id="refund" class="bad">Request refund</button></div>
+    <div id="mmsg" class="msg"></div></div>
+</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},S={ses:null,org:null,sel:null};
+function el(t,a,k){var e=document.createElement(t);if(a)for(var x in a){if(x==="text")e.textContent=a[x];else if(x==="onclick")e.onclick=a[x];else e.setAttribute(x,a[x])}(k||[]).forEach(function(c){e.appendChild(c)});return e}
+function say(id,t,c){var m=$(id);m.textContent=t||"";m.className="msg "+(c||"")}
+function money(c){return new Intl.NumberFormat(undefined,{style:"currency",currency:"USD"}).format((c||0)/100)}
+function day(s){return s?new Date(s).toLocaleDateString():"—"}
+async function api(method,path,body){var h={authorization:"Bearer "+S.ses.access_token,"content-type":"application/json"};if(S.org)h["x-org-id"]=S.org;var r=await fetch("/api/soc/"+path,{method:method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});var j=await r.json().catch(function(){return{}});if(!r.ok){var e=new Error(j.error||("Request failed ("+r.status+")"));e.status=r.status;throw e}return j}
+var F=[["name","Name","text"],["maxDevices","Devices","number"],["maxApiKeys","API keys","number"],["maxExecutors","Executors","number"],["retentionDays","Retention (days)","number"],["trialDays","Trial days","number"],["priceMonthlyCents","Monthly price (cents)","number"],["priceAnnualCents","Annual price (cents)","number"]];
+async function paintStats(){var s=await api("GET","billing/admin/stats"),b=$("stats");b.textContent="";
+  var items=[["Organizations",s.organizations],["Free / Pro / Enterprise",s.byPlan.free+" / "+s.byPlan.pro+" / "+s.byPlan.enterprise],["Paid subscriptions",s.paidSubscriptions],["Est. monthly recurring revenue",money(s.estimatedMrrCents)],["Revenue (30 days)",money(s.revenueLast30dCents)],["Revenue (total)",money(s.revenueTotalCents)],["Refunded",money(s.refundedTotalCents)],["Active trials",s.trialing],["Trials expired",s.trialExpired],["Past due",s.pastDue],["Cancelling",s.canceling],["Failed payments",s.failedPayments]];
+  var g=el("div",{class:"grid"});items.forEach(function(i){g.appendChild(el("div",{class:"plan"},[el("div",{class:"mut",text:i[0]}),el("div",{class:"price",text:String(i[1])})]))});b.appendChild(g);b.appendChild(el("p",{class:"mut",text:s.note}))}
+async function paintPlans(){var r=await api("GET","billing/admin/plans"),box=$("plans");box.textContent="";$("grace").value=r.graceDays;
+  r.plans.forEach(function(p){var card=el("div",{class:"plan"}),ins={};card.appendChild(el("b",{text:p.id.toUpperCase()}));
+    F.forEach(function(f){var i=el("input",{type:f[2],placeholder:f[1],style:"width:100%"});i.value=p[f[0]]==null?"":p[f[0]];ins[f[0]]=i;card.appendChild(el("div",{class:"mut",text:f[1]}));card.appendChild(i)});
+    card.appendChild(el("button",{text:"Save plan",style:"margin-top:8px",onclick:async function(){var b={};F.forEach(function(f){var v=ins[f[0]].value;b[f[0]]=f[2]==="number"?(v===""?null:Number(v)):v});say("planmsg","Saving…");try{await api("PUT","billing/admin/plans/"+p.id,b);say("planmsg","Saved "+p.id+".","good")}catch(e){say("planmsg",e.message,"err")}}}));box.appendChild(card)})}
+async function paintOrgs(){var r=await api("GET","billing/admin/orgs"),box=$("orgs");box.textContent="";var t=el("table"),h=el("tr");["Organization","Plan","Status","Trial","Period end",""].forEach(function(x){h.appendChild(el("th",{text:x}))});t.appendChild(h);
+  r.organizations.forEach(function(o){t.appendChild(el("tr",0,[el("td",{text:o.name}),el("td",{text:o.plan+(o.interval?" ("+o.interval+")":"")}),el("td",{text:o.status+(o.paymentFailedAt?" · payment failed":"")+(o.cancelAtPeriodEnd?" · cancelling":"")}),el("td",{text:o.trial==="none"?"—":o.trial+" "+day(o.trialEndsAt)}),el("td",{text:day(o.currentPeriodEnd)}),el("td",0,[el("button",{class:"sec",text:"Manage",onclick:function(){S.sel=o;$("manage").classList.remove("hide");$("mtitle").textContent="Manage: "+o.name;say("mmsg","");$("manage").scrollIntoView()}})])]))});box.appendChild(t)}
+async function paintPreview(){var r=await api("GET","billing/admin/preview"),b=$("preview");b.textContent="";var m=r.summary;
+  b.appendChild(el("div",{class:"row"},[el("b",{text:m.organizations+" organizations"}),el("span",{class:m.withViolations?"err":"good",text:m.withViolations+" over a limit"}),el("span",{class:"mut",text:m.restricted+" restricted · "+m.grandfathered+" existing customers keep full access · "+m.wouldStartTrial+" new would start a trial"}),el("span",{class:"mut",text:"Enforcement on server: "+(r.enforcedOnServer?"ON":"off")})]));
+  var t=el("table"),h=el("tr");["Organization","Plan","Devices","API keys","Executors","Retention","Violations"].forEach(function(x){h.appendChild(el("th",{text:x}))});t.appendChild(h);
+  var u=function(a,l){return a+" / "+(l==null?"∞":l)};
+  r.organizations.forEach(function(o){t.appendChild(el("tr",0,[el("td",{text:o.name}),el("td",{text:o.plan+" ("+o.trial+")"}),el("td",{text:u(o.used.devices,o.limits.devices)}),el("td",{text:u(o.used.apiKeys,o.limits.apiKeys)}),el("td",{text:u(o.used.executors,o.limits.executors)}),el("td",{text:o.retentionDays==null?"—":o.retentionDays+" d"}),el("td",{class:o.violations.length?"err":"mut",text:o.violations.length?o.violations.join("; "):"none"})]))});b.appendChild(t);b.appendChild(el("p",{class:"mut",text:r.note}))}
+function lim(v){v=v.trim();if(v==="")return undefined;if(v.toLowerCase()==="none")return null;return Number(v)}
+function act(id,fn){$(id).onclick=async function(){if(!S.sel)return;say("mmsg","Working…");try{var m=await fn();say("mmsg",m||"Done.","good");paintOrgs();paintStats()}catch(e){say("mmsg",e.message,"err")}}}
+act("saveov",async function(){var b={maxDevices:lim($("ovd").value),maxApiKeys:lim($("ovk").value),maxExecutors:lim($("ove").value),retentionDays:lim($("ovr").value)};await api("PUT","billing/admin/orgs/"+S.sel.id+"/overrides",b);return "Custom limits saved."});
+act("resetov",async function(){await api("PUT","billing/admin/orgs/"+S.sel.id+"/overrides",{reset:true});return "Custom limits removed."});
+act("granttrial",async function(){var r=await api("POST","billing/admin/orgs/"+S.sel.id+"/trial",{days:Number($("tdays").value)});return "Trial runs until "+day(r.trialEndsAt)+"."});
+act("mkcoupon",async function(){var b={percentOff:Number($("cpct").value),duration:$("cdur").value};if(b.duration==="repeating")b.months=Number($("cmon").value);var r=await api("POST","billing/admin/coupons",b);$("cid").value=r.couponId;return "Coupon created: "+r.couponId});
+act("applyc",async function(){await api("POST","billing/admin/orgs/"+S.sel.id+"/discount",{couponId:$("cid").value.trim()});return "Discount applied."});
+act("refund",async function(){if(!confirm("Request this refund?"))return "Cancelled.";var b={paymentId:$("rpay").value.trim()};if($("ramt").value)b.amountCents=Number($("ramt").value);var r=await api("POST","billing/admin/orgs/"+S.sel.id+"/refund",b);return r.message});
+$("savegrace").onclick=async function(){say("planmsg","Saving…");try{await api("PUT","billing/admin/settings",{graceDays:Number($("grace").value)});say("planmsg","Grace period saved.","good")}catch(e){say("planmsg",e.message,"err")}};
+(async function(){
+  try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){}
+  if(!S.ses||!S.ses.access_token){say("top","Please sign in on the account page first.","err");return}
+  try{var m=await api("GET","org/mine"),pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org,o=m.organizations.find(function(x){return x.id===pref})||m.organizations[0];S.org=o&&o.id;
+    await api("GET","billing/admin/plans");$("app").classList.remove("hide");await paintStats();await paintPlans();await paintPreview();await paintOrgs()}
+  catch(e){say("top",e.status===403?"This page is for platform administrators only.":e.message,"err")}
+})();
+})();
+</script></main></body></html>

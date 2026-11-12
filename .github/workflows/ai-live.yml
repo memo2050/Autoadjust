@@ -1,0 +1,29 @@
+name: ai-live-test
+# MANUAL ONLY. Uses a restricted, dev-only Anthropic key stored as an environment secret on a protected GitHub environment ("ai-live-test",
+# configure required reviewers there). Synthetic data only; executes nothing; no production access. Hard call/token budgets below.
+on:
+  workflow_dispatch:
+    inputs:
+      repeats: { description: "Repeats per scenario (cost scales with this)", default: "2", required: true }
+permissions: { contents: read }
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ai-live-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20.19.0" }
+      - run: npm ci --ignore-scripts
+      - name: Live AI test (budget-limited; key is never printed; output is scrubbed)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REPEATS: ${{ inputs.repeats }}
+          AI_LIVE_MAX_CALLS: "24"
+          AI_LIVE_MAX_TOKENS_TOTAL: "120000"
+          AI_MAX_OUTPUT_TOKENS: "1500"
+        run: set +x; npx tsx tests/live/ai-live.ts 2>&1 | tee ai-live.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: ai-live-log, path: ai-live.log, retention-days: 14 }

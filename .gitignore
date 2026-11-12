@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+coverage/
+# secrets: never commit real values (only .env.example is tracked)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secret*.txt
+# local test output
+*.log
+tests/**/artifacts/
+verification-logs/

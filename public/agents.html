@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Agents and execution</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e;--warn:#f5b84b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}h3{font-size:14px;margin:12px 0 6px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}.mut{color:var(--mut)}
+input,select,button,textarea{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg);border-color:var(--bd)}button.bad{background:transparent;color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 6px;border-bottom:1px solid var(--bd);text-align:left;font-size:13.5px;vertical-align:top}th{color:var(--mut);font-weight:600}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;border:1px solid var(--bd);font-size:12px}.ok{color:var(--ok);border-color:var(--ok)}.err{color:var(--bad);border-color:var(--bad)}.warn{color:var(--warn);border-color:var(--warn)}
+.big{font-size:26px;font-weight:700}.msg{min-height:20px;font-size:14px}.note{border-left:3px solid var(--warn);padding:6px 10px;background:#1a2036;border-radius:6px;font-size:13.5px;margin:8px 0}
+pre{background:#0d1428;border:1px solid var(--bd);border-radius:8px;padding:10px;overflow:auto;max-height:260px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}code{background:#0d1428;padding:1px 6px;border-radius:6px;word-break:break-all}a{color:var(--acc)}.hide{display:none}
+.tag{font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:#1c2a4d;color:#9db8ff}.tagx{background:#3a2a12;color:var(--warn)}
+</style></head><body><main>
+<h1>Agents and execution</h1>
+<p class="mut">AI analysis and controlled, read-only diagnostics for your organization. AI agents recommend; people decide; commands run only from a fixed list, only on hosts you registered, and only when an owner has switched execution on.</p>
+<div id="top" class="msg"></div>
+
+<section id="app" class="hide">
+  <div class="card"><div class="row"><b id="orgline"></b><span style="flex:1"></span><a href="/account.html">Account and organization</a></div>
+    <div class="row"><span>Command execution:</span><span id="exstate" class="pill"></span><button id="toggle" class="sec hide"></button><span class="mut" id="exwho"></span></div>
+    <div class="note">Off by default. Only an organization owner can turn it on. Every request, approval, result and switch change is written to the audit log. A finished command never marks an incident resolved: only fresh monitoring data does.</div></div>
+
+  <div class="grid">
+    <div class="card"><h2>Agents</h2><table id="agents"></table></div>
+    <div class="card"><h2>Success and failure rates</h2><div style="overflow-x:auto"><table id="rates"></table></div><div class="mut" id="ratenote"></div></div>
+    <div class="card"><h2>Hosts with an executor</h2><table id="execs"></table></div>
+  </div>
+
+  <div class="card"><h2>Pending approvals <span class="mut" id="pcount"></span></h2><div class="mut">AI-proposed diagnostics wait here until a person confirms them. Nothing runs before that.</div><table id="pending"></table></div>
+  <div class="card"><h2>Active tasks</h2><table id="active"></table></div>
+
+  <div class="card"><h2>Request a read-only diagnostic</h2>
+    <div class="row"><select id="rhost"></select><select id="rtpl"></select><span id="rparams"></span></div>
+    <div class="row"><input id="rreason" placeholder="Reason (shown in the audit log)" style="flex:1;min-width:220px"><button id="rdry" class="sec">Dry-run (preview only)</button><button id="rrun">Request run</button></div>
+    <div id="rmsg" class="msg"></div><pre id="rprev" class="hide"></pre></div>
+
+  <div class="card"><h2>Execution history</h2><table id="hist"></table><pre id="hout" class="hide"></pre></div>
+
+  <div class="card"><h2>AI analysis</h2>
+    <div class="row"><button id="asoc">Analyze security (SOC)</button><button id="anoc">Analyze infrastructure (NOC)</button><label class="mut"><input type="checkbox" id="aprop"> let the agent propose read-only diagnostics for my confirmation</label></div>
+    <div id="amsg" class="msg"></div><div id="aout"></div></div>
+</section>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},S={ses:null,stats:null,tpls:[],me:null};
+function el(t,a,k){var e=document.createElement(t);if(a)for(var x in a){if(x==="text")e.textContent=a[x];else if(x==="class")e.className=a[x];else e.setAttribute(x,a[x])}(k||[]).forEach(function(c){e.appendChild(typeof c==="string"?document.createTextNode(c):c)});return e}
+function say(id,t,c){var n=$(id);n.textContent=t||"";n.className="msg"+(c?" "+c:"")}
+function ago(s){if(!s)return"never";var m=Math.round((Date.now()-Date.parse(s))/60000);return m<1?"just now":m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"}
+async function api(m,p,b){var h={authorization:"Bearer "+S.ses.access_token,"content-type":"application/json"};var r=await fetch("/api/soc/"+p,{method:m,headers:h,body:b===undefined?undefined:JSON.stringify(b)});var j=await r.json().catch(function(){return{}});if(!r.ok){var e=new Error(j.error||("Error "+r.status));e.status=r.status;e.body=j;throw e}return j}
+function pill(t,c){return el("span",{class:"pill "+(c||""),text:t})}
+function stClass(s){return s==="succeeded"?"ok":["failed","timed_out","expired","rejected_by_policy"].indexOf(s)>=0?"err":"warn"}
+function fill(tbl,head,rows,empty){tbl.replaceChildren();if(!rows.length){tbl.appendChild(el("tr",0,[el("td",{class:"mut",text:empty})]));return}tbl.appendChild(el("tr",0,head.map(function(h){return el("th",{text:h})})));rows.forEach(function(r){tbl.appendChild(el("tr",0,r.map(function(c){return el("td",0,[c==null?"":c])})))})}
+function pr(p){return Object.keys(p||{}).map(function(k){return k+"="+p[k]}).join(" ")}
+
+async function load(){
+  var st=await api("GET","noc/exec/stats");S.stats=st;
+  var on=st.settings.enabled;$("exstate").textContent=on?"ON":"OFF";$("exstate").className="pill "+(on?"ok":"warn");$("exwho").textContent=st.settings.changedAt?("last changed by "+st.settings.changedBy+", "+ago(st.settings.changedAt)):"never switched";
+  fill($("execs"),["Host","OS","Status","Last contact"],st.executors.map(function(e){return[e.hostId,e.os,pill(e.enabled?(e.online?"online":"no recent contact"):"disabled",e.enabled&&e.online?"ok":"warn"),ago(e.lastPollAt)]}),"No executor registered. An admin registers a host and binds it to an organization API key.");
+  fill($("rates"),["Window","Finished","OK","Failed","Timed out","Unsupp.","Success"],st.rates.map(function(r){return[r.days+" days",String(r.finished),String(r.succeeded),String(r.failed),String(r.timedOut),String(r.unsupported||0),r.successRatePct==null?"no runs yet":r.successRatePct+"%"]}),"");$("ratenote").textContent=st.note;
+  var canD=true;
+  fill($("pending"),["Template","Host","Requested by","When","Decide"],st.pendingApprovals.map(function(j){return[j.template+" "+pr(j.params),j.hostId,j.requestedBy+(j.requestedByKind==="agent"?" (AI)":""),ago(j.requestedAt),el("span",0,[el("button",{text:"Approve",onclick:"void 0"}),el("button",{class:"bad",text:"Reject"})])]}),"Nothing waiting for a decision.");
+  var rows=$("pending").querySelectorAll("tr");st.pendingApprovals.forEach(function(j,i){var b=rows[i+1].querySelectorAll("button");b[0].onclick=function(){decide(j.id,"approve")};b[1].onclick=function(){decide(j.id,"reject")}});
+  $("pcount").textContent=st.pendingApprovals.length?"("+st.pendingApprovals.length+")":"";
+  fill($("active"),["Template","Host","Status","Requested by","Approved by"],st.active.map(function(j){return[j.template+" "+pr(j.params),j.hostId,pill(j.status,"warn"),j.requestedBy,j.approvedBy||"—"]}),"No active tasks.");
+  fill($("hist"),["When","Template","Host","Result","Requested by","Approved by",""],st.history.map(function(j){return[ago(j.endedAt||j.requestedAt),j.template+" "+pr(j.params),j.hostId,pill(j.status+(j.dryRun?" (dry-run)":""),stClass(j.status)),j.requestedBy,j.approvedBy||"—",el("button",{class:"sec",text:"Output",onclick:"void 0"})]}),"No executions yet.");
+  var hr=$("hist").querySelectorAll("tr");st.history.forEach(function(j,i){hr[i+1].querySelector("button").onclick=function(){showOut(j.id)}});
+}
+async function showOut(id){var j=await api("GET","noc/diag/"+id);var p=$("hout");p.classList.remove("hide");p.textContent=(j.dryRun?"[DRY-RUN — nothing was run]\n":"")+"Command: "+j.argvPreview+"\nStatus: "+j.status+(j.exitCode!=null?" (exit code "+j.exitCode+")":"")+"\nRequested by: "+j.requestedBy+(j.approvedBy?"  Approved by: "+j.approvedBy:"")+"\nRequested: "+j.requestedAt+(j.endedAt?"  Finished: "+j.endedAt:"")+(j.error?"\nNote: "+j.error:"")+"\n\n"+(j.output!=null?j.output:"(no output)")+"\n\n"+j.note}
+async function decide(id,w){try{await api("POST","noc/diag/"+id+"/"+w,{});await load()}catch(e){say("top",e.message,"err")}}
+function buildForm(){
+  var hs=$("rhost");hs.replaceChildren();(S.stats.executors||[]).filter(function(e){return e.enabled}).forEach(function(e){hs.appendChild(el("option",{value:e.hostId,text:e.hostId+" ("+e.os+")"}))});
+  var ts=$("rtpl");ts.replaceChildren();S.tpls.forEach(function(t){ts.appendChild(el("option",{value:t.id,text:t.id+" — "+t.title}))});ts.onchange=params;params()}
+function params(){var t=S.tpls.find(function(x){return x.id===$("rtpl").value}),box=$("rparams");box.replaceChildren();if(!t)return;Object.keys(t.params).forEach(function(k){var d=t.params[k],i;if(d.type==="enum"){i=el("select",{id:"p_"+k},d.values.map(function(v){return el("option",{value:v,text:v})}))}else{i=el("input",{id:"p_"+k,placeholder:k+(d.type==="int"?" ("+d.min+"–"+d.max+")":d.type==="port"?" (1–65535)":""),size:"16"})}box.appendChild(i)})}
+function body(dry){var t=S.tpls.find(function(x){return x.id===$("rtpl").value}),p={};Object.keys(t.params).forEach(function(k){var v=$("p_"+k).value;if(v!=="")p[k]=v});return{hostId:$("rhost").value,template:t.id,params:p,dryRun:dry,reason:$("rreason").value||undefined}}
+async function submit(dry){say("rmsg","Working…");try{var j=await api("POST","noc/diag",body(dry));var p=$("rprev");p.classList.remove("hide");p.textContent=(dry?"DRY-RUN — nothing was sent to the host.\n":"Request recorded — status: "+j.status+".\n")+"Command that would run: "+j.argvPreview+"\nChecks passed:\n - "+j.policy.join("\n - ");say("rmsg",dry?"Preview ready.":("Status: "+j.status+(j.status==="queued"?" — the host's executor will pick it up on its next poll.":"")),"");await load()}catch(e){say("rmsg",e.message,"err")}}
+function sect(t,nodes){return el("div",0,[el("h3",{text:t})].concat(nodes))}
+function conf(c){return pill(c+" confidence",c==="high"?"ok":c==="medium"?"warn":"")}
+function recList(recs){return el("ul",0,recs.map(function(r){return el("li",0,[el("span",{class:"tag tagx",text:"recommendation · not executed"})," ",pill(r.priority),el("span",{text:" "+r.action}),el("div",{class:"mut",text:r.rationale+" Evidence: "+(r.evidenceIds.slice(0,6).join(", ")||"none")+". "}),conf(r.confidence),r.changesSystem?pill("a person must make this change","warn"):""])}))}
+function diagList(d){return d.length?el("ul",0,d.map(function(x){return el("li",0,[el("code",{text:x.template+(x.params?" "+pr(x.params):"")+" @ "+x.hostId})," — "+x.why+" ",pill(x.status==="proposed_awaiting_human"?"proposed — waiting for your confirmation":"suggested, not requested",x.status==="proposed_awaiting_human"?"warn":"")])})):el("div",{class:"mut",text:"None."})}
+function limits(l){return l&&l.length?el("div",{class:"note"},["What this analysis could not determine: "+l.join(" · ")]):""}
+async function analyze(kind){say("amsg","Analyzing your organization's data…");$("aout").replaceChildren();try{var r=await api("POST",kind==="soc"?"ai/analyze":"noc/ai/analyze",{proposeDiagnostics:$("aprop").checked});var o=$("aout"),n=[];
+  n.push(el("div",{class:"mut",text:"Method: "+r.method+(r.aiModel?" ("+r.aiModel+")":"")+" · data used: "+Object.keys(r.dataUsed).map(function(k){return r.dataUsed[k]+" "+k}).join(", ")+" · "+r.contract}));
+  if(r.narrative)n.push(el("div",{class:"note"},[el("b",{text:"AI summary: "}),r.narrative," ",el("span",{class:"mut",text:r.narrativeNote})]));
+  if(kind==="soc"){n.push(sect("Priorities",[el("table",0,[el("tr",0,["Incident","Host","Score","Level","Why"].map(function(h){return el("th",{text:h})}))].concat(r.priorities.slice(0,10).map(function(p){return el("tr",0,[el("td",{text:p.incidentId+" "+p.title}),el("td",{text:p.host}),el("td",{text:String(p.score)}),el("td",0,[pill(p.level,p.level==="critical"||p.level==="high"?"err":"warn"),conf(p.confidence)]),el("td",{text:p.explanation})])})))]));
+    n.push(sect("Correlations (leads, not proof)",r.correlations.length?[el("ul",0,r.correlations.slice(0,10).map(function(c){return el("li",0,[c.summary+" ",conf(c.confidence)])}))]:[el("div",{class:"mut",text:"None found."})]))}
+  else{n.push(sect("Health",[el("div",{text:r.health.filter(function(h){return h.status!=="healthy"}).map(function(h){return h.name+": "+h.status}).join(" · ")||"All reporting devices look healthy."})]));
+    r.analyses.forEach(function(a){n.push(sect(a.name+" — "+a.status,a.rootCauses.length?[el("ol",0,a.rootCauses.map(function(c){return el("li",0,[el("b",{text:c.cause+" "}),conf(c.confidence),el("div",{class:"mut",text:"Supports: "+c.supports.join("; ")+(c.contradicts.length?" · Against: "+c.contradicts.join("; "):"")+" · Evidence: "+c.evidence.slice(0,6).join(", ")})])}))]:[el("div",{class:"mut",text:"No hypothesis could be formed from the available data."})]))});
+    if(r.anomalies.length)n.push(sect("Anomalies",[el("ul",0,r.anomalies.map(function(a){return el("li",0,[a.deviceId+": "+a.why+" ",conf(a.confidence)])}))]))}
+  n.push(sect("Recommendations",[recList(r.recommendations)]));n.push(sect("Read-only diagnostics that could help",[diagList(r.suggestedDiagnostics)]));n.push(limits(r.limitations));
+  n.forEach(function(x){if(x)o.appendChild(x)});say("amsg","");if($("aprop").checked)await load()}catch(e){say("amsg",e.message,"err")}}
+async function init(){
+  try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){}
+  if(!S.ses||!S.ses.access_token){say("top","Please sign in first.","err");$("top").appendChild(document.createTextNode(" "));$("top").appendChild(el("a",{href:"/account.html",text:"Go to sign in"}));return}
+  try{S.tpls=await api("GET","noc/exec/templates");await load();$("app").classList.remove("hide");buildForm();
+    var owner=false;try{var r=await api("GET","me");owner=r&&r.orgRole==="owner";$("orgline").textContent=((r.organization&&r.organization.name)||"")+(r.orgRole?" · "+r.orgRole.replace(/_/g," "):"")}catch(e){}
+    $("toggle").classList.toggle("hide",!owner);var upd=function(){$("toggle").textContent=S.stats.settings.enabled?"Switch execution off":"Switch execution on"};upd();
+    $("toggle").onclick=async function(){var want=!S.stats.settings.enabled;if(want&&!confirm("Turn on read-only command execution for this organization? Executors on registered hosts will start running approved diagnostics from the fixed list."))return;try{await api("PUT","noc/exec/settings",{enabled:want});await load();upd()}catch(e){say("top",e.message,"err")}};
+    var ag=[["AI SOC analyst","Analysis and recommendations only"],["AI NOC analyst","Analysis and recommendations only"]];fill($("agents"),["Agent","Mode","Last analysis"],ag.map(function(a){return[a[0],a[1],"on demand"]}),"");
+  }catch(e){if(e.status===409&&e.body&&e.body.code==="choose_organization")say("top","You belong to several organizations. Choose one on the account page first.","err");else say("top",e.message,"err")}}
+$("rdry").onclick=function(){submit(true)};$("rrun").onclick=function(){submit(false)};$("asoc").onclick=function(){analyze("soc")};$("anoc").onclick=function(){analyze("noc")};
+init();
+})();
+</script></main></body></html>

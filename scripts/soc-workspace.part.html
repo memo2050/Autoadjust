@@ -1,0 +1,436 @@
+<!--SOCWS-START-->
+<style>
+#soct .soc-hot{--b:#4aa8ff;--rg:74,168,255;--rt:#d6ebff;position:absolute;top:66.4%;width:14.9%;height:9.3%;margin:0;padding:0;border:0;border-radius:12px;background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:box-shadow .25s,background .25s,transform .18s;z-index:3}
+#soct .soc-hot[data-role=analyst]{left:.1%}#soct .soc-hot[data-role=engineer]{left:17.2%}#soct .soc-hot[data-role=hunter]{left:34.1%}#soct .soc-hot[data-role=responder]{left:51.1%}#soct .soc-hot[data-role=siem]{left:68.1%}#soct .soc-hot[data-role=ciso]{left:85.2%;width:14.7%}
+#soct .soc-hot[data-role=analyst],#soct .soc-robot[data-role=analyst],#socws [data-role=analyst]{--b:#4aa8ff;--rg:74,168,255;--rt:#d6ebff}
+#soct .soc-hot[data-role=engineer],#soct .soc-robot[data-role=engineer],#socws [data-role=engineer]{--b:#35e08a;--rg:53,224,138;--rt:#d3ffe6}
+#soct .soc-hot[data-role=hunter],#soct .soc-robot[data-role=hunter],#socws [data-role=hunter]{--b:#b17bff;--rg:177,123,255;--rt:#eddcff}
+#soct .soc-hot[data-role=responder],#soct .soc-robot[data-role=responder],#socws [data-role=responder]{--b:#ff4d5e;--rg:255,77,94;--rt:#ffd9dd}
+#soct .soc-hot[data-role=siem],#soct .soc-robot[data-role=siem],#socws [data-role=siem]{--b:#2fe3ff;--rg:47,227,255;--rt:#d4faff}
+#soct .soc-hot[data-role=ciso],#soct .soc-robot[data-role=ciso],#socws [data-role=ciso]{--b:#ffc93c;--rg:255,201,60;--rt:#fff0c4}
+#soct .soc-hot:hover,#soct .soc-hot:focus-visible,#soct .soc-hot.sel{background:rgba(var(--rg),.15);box-shadow:0 0 0 2px var(--b),0 0 26px 4px rgba(var(--rg),.75)}
+#soct .soc-hot:hover,#soct .soc-hot:focus-visible{transform:translateY(-1px)}
+#soct .soc-hot.sel{animation:socpill 2.6s ease-in-out infinite}
+@keyframes socpill{0%,100%{box-shadow:0 0 0 2px var(--b),0 0 14px 1px rgba(var(--rg),.55)}50%{box-shadow:0 0 0 2px var(--b),0 0 36px 7px rgba(var(--rg),.9)}}
+#soct .soc-hot:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#soct .soc-hot:active{transform:translateY(0) scale(.99)}
+#soct .soc-hot .tip{position:absolute;left:6px;bottom:calc(100% + 8px);transform:translateY(4px);background:#0b0f1a;color:var(--rt);border:1px solid var(--b);border-radius:99px;padding:5px 11px;font:600 12px/1.2 system-ui,sans-serif;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
+#soct .soc-hot:hover .tip,#soct .soc-hot:focus-visible .tip{opacity:1;transform:translateY(0)}
+#soct .soc-robot{position:absolute;top:39.5%;height:28%;width:15.4%;pointer-events:none;z-index:2;border-radius:22px;opacity:0;transition:opacity .35s;background:radial-gradient(ellipse at 50% 60%,rgba(var(--rg),.30),rgba(var(--rg),0) 72%)}
+#soct .soc-robot:after{content:"";position:absolute;inset:0;border-radius:22px;border:2px solid var(--b);box-shadow:0 0 24px rgba(var(--rg),.75),inset 0 0 24px rgba(var(--rg),.3)}
+#soct .soc-robot[data-role=analyst]{left:.4%}#soct .soc-robot[data-role=engineer]{left:18.1%}#soct .soc-robot[data-role=hunter]{left:34.2%}#soct .soc-robot[data-role=responder]{left:50.6%}#soct .soc-robot[data-role=siem]{left:66.5%}#soct .soc-robot[data-role=ciso]{left:84.4%}
+#soct .soc-robot.hov{opacity:.7}#soct .soc-robot.on{opacity:1;animation:socbreath 2.8s ease-in-out infinite}
+@keyframes socbreath{0%,100%{filter:brightness(.8)}50%{filter:brightness(1.35)}}
+@media (max-width:640px){#soct .soc-hot .tip{display:none}}
+@media (hover:none){#soct .soc-hot .tip{display:none}}
+.soc-open2{display:inline-flex;align-items:center;gap:8px;margin:0;border:1.5px solid #4aa8ff;background:rgba(74,168,255,.1);color:#d6ebff;border-radius:99px;padding:9px 16px;font:700 14px/1.2 system-ui,sans-serif;cursor:pointer;transition:box-shadow .15s,background .15s}
+.soc-open2:hover,.soc-open2:focus-visible{background:rgba(74,168,255,.22);box-shadow:0 0 18px rgba(74,168,255,.6)}
+.soc-open2:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#socws{position:fixed;inset:0;z-index:1000;background:rgba(8,5,8,.86);display:none;overflow:auto;-webkit-overflow-scrolling:touch}
+#socws.open{display:block}
+#socws .ws{--bd2:rgba(var(--rg),.35);box-shadow:0 0 0 1px rgba(var(--rg),.25),0 0 70px rgba(var(--rg),.14);transition:box-shadow .4s;max-width:1320px;margin:0 auto;min-height:100%;background:var(--bg);color:var(--fg);border-left:1px solid var(--bd2);border-right:1px solid var(--bd2);padding:0 0 40px;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:left}
+#socws header.wh{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--bd2);padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+#socws .wt{display:flex;align-items:center;gap:10px;flex:1 1 260px;min-width:0}
+#socws .wt .ic{width:34px;height:34px;border-radius:10px;border:1.5px solid var(--b);box-shadow:0 0 14px rgba(var(--rg),.6);display:grid;place-items:center;color:var(--b);flex:none}
+#socws h2{margin:0;font-size:19px;line-height:1.2;color:var(--fg);text-align:left}
+#socws .wt small{display:block;color:var(--mut);font-size:12.5px}
+#socws .badge{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid currentColor;white-space:nowrap;vertical-align:middle}
+#socws .b-crit{color:#ff6b7a}#socws .b-med{color:#ffcf5a}#socws .b-low{color:#6fb5ff}#socws .b-live{color:#58e08a}#socws .b-imported{color:#6fb5ff}#socws .b-demo{color:#ffcf5a}#socws .b-off{color:#ff9a8a}
+#socws .xbtn{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:10px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+#socws .xbtn:hover{border-color:var(--b)}
+#socws button:focus-visible,#socws input:focus-visible,#socws select:focus-visible,#socws textarea:focus-visible,#socws summary:focus-visible,#socws [tabindex]:focus-visible{outline:2px solid var(--b);outline-offset:2px}
+#socws .banner{margin:14px 16px 0;padding:12px 14px;border-radius:12px;border:1px solid;font-size:14px}
+#socws .banner.sample{border-color:#ffcf5a;background:rgba(255,207,90,.08);color:#ffe7a6}
+#socws .banner.info{border-color:var(--bd2);background:rgba(var(--rg),.07)}
+#socws .banner.bad{border-color:#ff9a8a;background:rgba(255,120,100,.08);color:#ffc9c0}
+#socws .banner b{color:inherit}
+#socws .banner form{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+#socws input[type=password],#socws input[type=text],#socws select,#socws textarea{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;padding:9px 11px;font:inherit;min-width:0}
+#socws .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:14px 16px 0}
+#socws .kpi{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 14px}
+#socws .kpi .n{font-size:28px;font-weight:800;line-height:1.1}
+#socws .kpi .l{color:var(--mut);font-size:12.5px}
+#socws .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;padding:14px 16px 0}
+#socws .pn{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;min-width:0}
+#socws .pn h3{margin:0 0 4px;font-size:15.5px;color:var(--fg);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#socws .pn .sub{margin:0 0 10px;color:var(--mut);font-size:12.5px}
+#socws .c4{grid-column:span 4}#socws .c5{grid-column:span 5}#socws .c6{grid-column:span 6}#socws .c7{grid-column:span 7}#socws .c8{grid-column:span 8}#socws .c12{grid-column:span 12}
+@media (max-width:980px){#socws .c4,#socws .c5,#socws .c6,#socws .c7,#socws .c8{grid-column:span 12}}
+#socws .rows{display:grid;gap:6px;max-height:340px;overflow:auto;padding-right:2px}
+#socws .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px 10px;text-align:left;color:var(--fg);font:inherit;width:100%;cursor:pointer}
+#socws .row:hover,#socws .row[aria-pressed=true]{border-color:var(--b);box-shadow:0 0 0 1px var(--b) inset}
+#socws .row .t{min-width:0;overflow-wrap:anywhere;font-size:13.5px}
+#socws .row .m{display:block;color:var(--mut);font-size:12px}
+#socws .sev{display:inline-block;min-width:62px;text-align:center;border-radius:7px;padding:2px 6px;font-size:11px;font-weight:800;text-transform:uppercase;color:#10080c}
+#socws .s-critical{background:#ff5d6c}#socws .s-high{background:#ff9a4d}#socws .s-medium{background:#f4cf57}#socws .s-low{background:#6fb5ff}#socws .s-info{background:#9aa5b1}
+#socws .mini{border:1px solid var(--bd2);background:transparent;color:var(--b);border-radius:8px;padding:4px 9px;font:600 12px/1.2 system-ui;cursor:pointer;white-space:nowrap}
+#socws .mini:hover{background:rgba(var(--rg),.14)}
+#socws .empty{color:var(--mut);font-size:13.5px;padding:8px 2px}
+#socws .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}
+#socws .chip{border:1px solid var(--bd);border-radius:99px;padding:2px 9px;font-size:11.5px;color:var(--mut)}
+#socws .bars{display:grid;gap:6px;margin:6px 0 10px}
+#socws .bar{display:grid;grid-template-columns:62px 1fr 28px;gap:8px;align-items:center;font-size:12.5px;color:var(--mut)}
+#socws .bar i{display:block;height:10px;border-radius:6px;min-width:2px}
+#socws .ai-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+#socws .abtn{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--b);background:rgba(var(--rg),.1);color:var(--rt);border-radius:11px;padding:9px 14px;font:700 14px/1.2 system-ui;cursor:pointer;transition:box-shadow .15s,background .15s}
+#socws .abtn:hover{background:rgba(var(--rg),.22);box-shadow:0 0 16px rgba(var(--rg),.55)}
+#socws .abtn[disabled]{opacity:.55;cursor:progress}
+#socws .spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(214,235,255,.35);border-top-color:var(--rt);animation:socspin .8s linear infinite;display:none}
+#socws [aria-busy=true] .spin{display:inline-block}
+@keyframes socspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#socws .spin{animation-duration:2.4s}#soct .soc-hot,#soct .soc-robot{transition:none}#soct .soc-hot.sel,#soct .soc-robot.on,#socws .rolebar button,#socws header.wh:after,#socws .rolepane{animation:none!important}}
+/*SOCORCH-CSS*/
+#socws [data-role=team]{--b:#8b9bff;--rg:139,155,255;--rt:#e3e7ff}
+#socws .orch-sel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 4px}
+#socws .orch-chip,#socws .mini.on{border:1px solid var(--b);color:var(--rt);background:rgba(var(--rg),.18)}
+#socws .orch-chip{border-radius:99px;padding:4px 11px;font:600 12px system-ui;cursor:pointer;background:transparent;color:var(--mut);border-color:var(--bd)}
+#socws .orch-chip.on{color:var(--rt);border-color:var(--b);background:rgba(var(--rg),.18);box-shadow:0 0 10px rgba(var(--rg),.4)}
+#socws .orch-chip:disabled{cursor:default}
+#socws .orch-id{font:12px ui-monospace,monospace;color:var(--rt)}
+#socws .orch-net{position:relative;aspect-ratio:16/9;max-height:440px;width:100%;border:1px solid var(--bd2);border-radius:14px;background:radial-gradient(ellipse at 50% 50%,rgba(var(--rg),.14),transparent 70%),var(--bg);margin:12px 0;overflow:hidden}
+#socws .orch-ov{position:absolute;inset:0;width:100%;height:100%}
+#socws .orch-ov .sp{stroke:rgba(139,155,255,.28);stroke-width:1;stroke-dasharray:3 4;vector-effect:non-scaling-stroke}
+#socws .orch-ov .rg{stroke:rgba(139,155,255,.4);stroke-width:1.2;vector-effect:non-scaling-stroke}
+#socws .orch-msgln{stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 4px #8bf);animation:orchfade 1.4s forwards}
+@keyframes orchfade{0%{opacity:0}15%{opacity:1}100%{opacity:0}}
+#socws .orch-pt{position:absolute;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 10px 3px #7ec8ff,0 0 22px 6px rgba(139,155,255,.8);pointer-events:none;transform:translate(-50%,-50%);z-index:3}
+#socws .orch-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:124px;padding:10px 6px;border-radius:16px;border:1.5px solid var(--b);background:rgba(10,14,26,.9);text-align:center;font-size:11px;color:var(--rt);z-index:2;display:grid;gap:3px}
+#socws .orch-core small{color:var(--mut);font-size:10.5px}#socws .orch-core.run{animation:conring 1.4s infinite}
+#socws .orch-n{position:absolute;transform:translate(-50%,-50%);width:116px;display:grid;justify-items:center;gap:2px;background:rgba(10,14,26,.88);border:1.5px solid var(--b);border-radius:14px;padding:7px 5px;color:var(--rt);font:inherit;cursor:pointer;z-index:2;transition:box-shadow .25s,opacity .25s}
+#socws .orch-n b{font-size:11.5px}#socws .orch-n em{font-style:normal;font-size:10.5px;color:var(--mut)}
+#socws .orch-n.cur{box-shadow:0 0 18px rgba(var(--rg),.7)}
+#socws .orch-n.snd{box-shadow:0 0 0 2px var(--b),0 0 30px 6px rgba(var(--rg),.95);animation:conring 1s infinite}
+#socws .orch-n.rcv{box-shadow:0 0 0 2px #fff,0 0 30px 6px rgba(var(--rg),.95)}
+#socws .orch-n[data-sts=c]{border-color:#58e08a}#socws .orch-n[data-sts=f]{border-color:#ff4d5e;box-shadow:0 0 14px rgba(255,77,94,.6)}#socws .orch-n[data-sts=w],#socws .orch-n[data-sts=i]{opacity:.72}
+#socws .orch-pb{display:block;width:80%;height:4px;background:var(--bd);border-radius:9px;overflow:hidden}#socws .orch-pb s{display:block;height:100%;background:var(--b);transition:width .3s;text-decoration:none}
+#socws .orch-ic{display:grid;place-items:center;color:var(--b)}
+#socws .orch-who{color:var(--b)}#socws .orch-m{padding:4px 0}
+#socws .orch-feed{max-height:260px}
+#socws .orch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:8px}
+#socws .orch-risk span{font:800 34px system-ui}
+#socws .con-st[data-sts=w] i{background:#ffcf5a}#socws .con-st[data-sts=f] i{background:#ff4d5e;box-shadow:0 0 8px #ff4d5e}
+#socws .rolebar [data-sts=f]:after{content:"!";margin-left:6px;color:#ff4d5e;font-weight:800}
+#socws .rolebar [data-sts=w]:after{content:"\2026";margin-left:6px;color:#ffcf5a}
+#soct .soc-hot[data-sts=w] .sts{color:#ffe09a;border-color:#ffcf5a}#soct .soc-hot[data-sts=f] .sts{color:#ffd9dd;border-color:#ff4d5e;box-shadow:0 0 10px rgba(255,77,94,.7)}
+.soc-stl li[data-sts=w] i{background:#ffcf5a}.soc-stl li[data-sts=f] i{background:#ff4d5e;box-shadow:0 0 8px #ff4d5e}
+@media (max-width:640px){#socws .orch-net{aspect-ratio:1/1.2}#socws .orch-n{width:86px;padding:5px 3px}#socws .orch-n b{font-size:10px}#socws .orch-n em{font-size:9px}#socws .orch-core{width:88px;font-size:9px;padding:6px 3px}#socws .orch-core small{font-size:9px}}
+@media (prefers-reduced-motion:reduce){#socws .orch-n,#socws .orch-core{animation:none!important}}
+/*SOCCON-CSS*/
+#socws .con{grid-column:1/-1;margin:0 0 14px;border-color:var(--bd2);box-shadow:0 0 0 1px rgba(var(--rg),.12),0 0 40px rgba(var(--rg),.08)}
+#socws .con-top{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+#socws .con-h{margin:0;font:800 15px/1.25 system-ui;letter-spacing:.06em;color:var(--rt)}
+#socws .con-st{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--b);border-radius:99px;padding:4px 12px;font:700 12.5px system-ui;color:var(--rt);background:rgba(var(--rg),.1)}
+#socws .con-st i{width:9px;height:9px;border-radius:50%;background:#6b7a90}
+#socws .con-st[data-sts=a] i,#socws .con-st[data-sts=v] i{background:var(--b);box-shadow:0 0 10px var(--b);animation:conblink 1s ease-in-out infinite}
+#socws .con-st[data-sts=c] i{background:#58e08a;box-shadow:0 0 8px #58e08a}#socws .con-st[data-sts=s] i{background:#ffcf5a}
+@keyframes conblink{50%{opacity:.35;transform:scale(.8)}}
+#socws .con-lab{font-size:12.5px;color:var(--mut);margin:0 0 8px}
+#socws .con-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}#socws .con-row input{flex:1 1 260px}
+#socws .con-sec{background:transparent}#socws .abtn:disabled{opacity:.45;cursor:not-allowed}
+#socws .con-presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+#socws .con-flow{display:flex;align-items:flex-start;margin:14px 0 6px;gap:0}
+#socws .con-n{display:grid;justify-items:center;gap:5px;text-align:center;flex:0 0 auto;width:92px;font-size:11.5px;color:var(--mut)}
+#socws .con-d{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--bd);display:grid;place-items:center;font:700 12px system-ui;background:var(--bg);transition:.3s}
+#socws .con-n.done .con-d{border-color:var(--b);color:var(--rt);background:rgba(var(--rg),.18);box-shadow:0 0 12px rgba(var(--rg),.5)}
+#socws .con-n.act .con-d{border-color:var(--b);color:#fff;background:rgba(var(--rg),.4);animation:conring 1.2s ease-in-out infinite}
+#socws .con-n.act b,#socws .con-n.done b{color:var(--rt)}
+@keyframes conring{0%,100%{box-shadow:0 0 0 0 rgba(var(--rg),.7)}50%{box-shadow:0 0 0 9px rgba(var(--rg),0),0 0 18px rgba(var(--rg),.8)}}
+#socws .con-c{flex:1 1 20px;height:2px;min-width:14px;background:var(--bd);position:relative;margin:14px 0 0;overflow:hidden}
+#socws .con-c.done{background:var(--b);box-shadow:0 0 8px rgba(var(--rg),.8)}
+#socws .con-c s{position:absolute;top:-2px;left:-10px;width:6px;height:6px;border-radius:50%;background:var(--rt);box-shadow:0 0 8px var(--b);opacity:0;text-decoration:none}
+#socws .con-c.flow{background:rgba(var(--rg),.4)}#socws .con-c.flow s{animation:conpart 1s linear infinite}
+#socws .con-c.flow s:nth-child(2){animation-delay:.33s}#socws .con-c.flow s:nth-child(3){animation-delay:.66s}
+#socws .con-c.done s{animation:conpart 2.6s linear infinite}#socws .con-c.done s:nth-child(2){animation-delay:.9s}#socws .con-c.done s:nth-child(3){animation-delay:1.8s}
+@keyframes conpart{0%{left:-8px;opacity:0}15%{opacity:1}85%{opacity:1}100%{left:100%;opacity:0}}
+#socws .con-bar{height:12px;border-radius:99px;background:var(--bg);border:1px solid var(--bd);position:relative;overflow:hidden;margin:8px 0 14px}
+#socws .con-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,rgba(var(--rg),.45),var(--b));transition:width .35s;box-shadow:0 0 14px rgba(var(--rg),.7)}
+#socws .con-flow.run~.con-bar span{background-size:200% 100%;animation:consweep 1.4s linear infinite}
+@keyframes consweep{to{background-position:-200% 0}}
+#socws .con-bar em{position:absolute;right:8px;top:-2px;font:700 10px/16px system-ui;color:#fff;font-style:normal}
+#socws .con-cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+#socws .con-sub{margin:12px 0 6px;font-size:13.5px;color:var(--rt)}#socws .con-cols .con-sub{margin-top:0}
+#socws .con-log{max-height:230px;overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace}
+#socws .con-l{padding:2px 0}#socws .con-l:last-child{animation:socin .3s}#socws .con-l time{color:var(--mut);margin-right:6px}#socws .con-l.al{color:#ff9a8a}
+#socws .con-k{border:1px solid var(--bd);border-radius:5px;padding:0 5px;margin-right:4px;color:var(--b);font-size:10.5px}
+#socws .con-fd{max-height:230px;overflow:auto;display:grid;gap:6px;align-content:start}
+#socws .con-f{background:var(--bg);border:1px solid var(--bd);border-left:3px solid var(--bd);border-radius:8px;padding:6px 8px;font-size:12.5px}#socws .con-f:last-child{animation:socin .35s}
+#socws .con-f small{display:block;color:var(--mut);font:11px ui-monospace,monospace}
+#socws .con-f.f-critical{border-left-color:#ff4d5e}#socws .con-f.f-high{border-left-color:#ff9a3c}#socws .con-f.f-medium{border-left-color:#ffd24d}#socws .con-f.f-low{border-left-color:#6fb5ff}
+#socws .con-tw{overflow:auto;border:1px solid var(--bd);border-radius:10px}#socws .con-tw table{border-collapse:collapse;width:100%;font-size:12.5px}
+#socws .con-tw th,#socws .con-tw td{padding:6px 9px;text-align:left;border-bottom:1px solid var(--bd);vertical-align:top}#socws .con-tw th{color:var(--mut);font-weight:600;white-space:nowrap;background:var(--bg)}
+#socws .con-stg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0}
+#socws .con-stg span{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bd);border-radius:99px;padding:3px 11px;font-size:12px;color:var(--mut)}#socws .con-stg i{width:8px;height:8px;border-radius:50%;background:#46526a}
+#socws .con-stg .done{color:var(--rt);border-color:#58e08a}#socws .con-stg .done i{background:#58e08a}
+#socws .con-stg .active{color:#fff;border-color:var(--b);animation:conring 1.4s infinite}#socws .con-stg .active i{background:var(--b)}
+#socws .con-stg em{width:14px;height:1px;background:var(--bd)}
+#socws .con-r{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--bd);font-size:13px}#socws .con-r>span:nth-child(2){flex:1 1 240px}
+#socws .con-r .pP1{color:#ff9a8a;border-color:#ff9a8a}#socws .con-r .pP2{color:#ffcf5a;border-color:#ffcf5a}
+#socws .con-r .warn{color:#ffcf5a}#socws .con-ask{flex:1 1 100%;background:rgba(255,207,90,.08);border:1px solid #ffcf5a;border-radius:8px;padding:6px 9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px}
+#socws .con-lim{margin:0;padding-left:18px;color:var(--mut);font-size:12.5px}
+#socws .con-code{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre;max-height:300px;margin:0}
+#socws .con-h2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--bd);font-size:12.5px}#socws .con-h2 time{color:var(--mut)}#socws .con-h2 span:not(.sev){flex:1 1 200px}
+#socws .con-done{margin-top:6px}
+#socws .rolebar [data-sts=a]:after,#socws .rolebar [data-sts=v]:after{content:"";display:inline-block;width:7px;height:7px;margin-left:6px;border-radius:50%;background:var(--b);box-shadow:0 0 8px var(--b);animation:conblink 1s infinite}
+#socws .rolebar [data-sts=c]:after{content:"\2713";margin-left:6px;color:#58e08a;font-size:11px}
+@media (max-width:760px){#socws .con-cols{grid-template-columns:1fr}#socws .con-flow{flex-direction:column;align-items:stretch}#socws .con-n{width:auto;grid-auto-flow:column;justify-content:start;justify-items:start;align-items:center;gap:10px;font-size:12.5px}#socws .con-c{width:2px;height:16px;min-width:0;flex:0 0 16px;margin:0 0 0 14px}#socws .con-c s{display:none}#socws .con-c.flow s,#socws .con-c.done s{display:none}}
+#soct .soc-hot .sts{position:absolute;left:50%;top:calc(100% + 3px);transform:translateX(-50%);font:700 clamp(8px,1.15cqw,12px)/1 system-ui,sans-serif;letter-spacing:.04em;white-space:nowrap;color:var(--rt);background:rgba(8,12,22,.82);border:1px solid rgba(var(--rg),.55);border-radius:99px;padding:.25em .7em;pointer-events:none;text-transform:uppercase}
+#soct .soc-hot[data-sts=a] .sts,#soct .soc-hot[data-sts=v] .sts{border-color:var(--b);box-shadow:0 0 12px rgba(var(--rg),.8);animation:conblink 1.1s ease-in-out infinite}
+#soct .soc-hot[data-sts=c] .sts{color:#bdf5d0;border-color:#58e08a}#soct .soc-hot[data-sts=s] .sts{color:#ffe09a;border-color:#ffcf5a}
+#soct .soc-robot.work{opacity:.9;animation:socbreath 1.1s ease-in-out infinite}
+@container (max-width:520px){#soct .soc-hot .sts{display:none}}
+.soc-stl{list-style:none;margin:8px auto 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;font:600 12.5px system-ui,sans-serif;color:#9fb0c8}
+.soc-stl li{display:inline-flex;align-items:center;gap:6px}.soc-stl i{width:8px;height:8px;border-radius:50%;background:#46526a}
+.soc-stl li[data-role=analyst]{--b:#4aa8ff}.soc-stl li[data-role=engineer]{--b:#35e08a}.soc-stl li[data-role=hunter]{--b:#b17bff}.soc-stl li[data-role=responder]{--b:#ff4d5e}.soc-stl li[data-role=siem]{--b:#2fe3ff}.soc-stl li[data-role=ciso]{--b:#ffc93c}
+.soc-stl li[data-sts=a] i,.soc-stl li[data-sts=v] i{background:var(--b);box-shadow:0 0 8px var(--b);animation:conblink 1s infinite}.soc-stl li[data-sts=c] i{background:#58e08a}.soc-stl li[data-sts=s] i{background:#ffcf5a}
+.soc-stl li[data-sts=a],.soc-stl li[data-sts=v]{color:#e8f1ff}
+@media (prefers-reduced-motion:reduce){#socws .con-c s,#socws .con-st i,#soct .soc-hot .sts,.soc-stl i{animation:none!important}}
+#socws .ask{display:grid;gap:8px}
+#socws .ask textarea{width:100%;min-height:70px;resize:vertical}
+#socws .st{min-height:20px;font-size:13px;color:var(--mut)}#socws .st.er{color:#ff9a8a}
+#socws .res{margin-top:10px;border-top:1px dashed var(--bd);padding-top:10px;font-size:14px;overflow-wrap:anywhere}
+#socws .res h4{margin:12px 0 4px;color:var(--b);font-size:14px}
+#socws .res ul{margin:4px 0;padding-left:20px}#socws .res li{margin:5px 0}
+#socws .res .cap{color:var(--mut);font-size:12px;margin-top:10px}
+#socws .ev{font:12px ui-monospace,Menlo,Consolas,monospace;color:var(--mut);border:1px solid var(--bd);border-radius:6px;padding:0 6px}
+#socws .nd{border-left:2px solid var(--bd2);padding-left:12px;display:grid;gap:8px;max-height:360px;overflow:auto}
+#socws .nd .e{position:relative;font-size:13px}
+#socws .nd .e:before{content:"";position:absolute;left:-17px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--b)}
+#socws .nd .e small{color:var(--mut);display:block}
+#socws details.guide{margin-top:12px;border:1px solid var(--bd);border-radius:12px;padding:10px 12px;background:var(--bg)}
+#socws details.guide summary{cursor:pointer;font-weight:700}
+#socws details.guide ol{margin:8px 0 0;padding-left:20px;font-size:13.5px}
+#socws code{background:rgba(255,255,255,.07);border-radius:5px;padding:1px 5px;font-size:12.5px;overflow-wrap:anywhere}
+#socws .ic-row{display:grid;gap:8px}
+#socws .ig{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:start;font-size:13px}
+#socws .ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+#socws header.wh{border-bottom-color:rgba(var(--rg),.55)}
+#socws header.wh:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,transparent,var(--b),transparent);animation:socsweep 3.2s ease-in-out infinite}
+@keyframes socsweep{0%,100%{opacity:.3}50%{opacity:1}}
+#socws .rolebar{display:flex;gap:8px;overflow-x:auto;padding:10px 16px;border-bottom:1px solid var(--bd);scrollbar-width:thin}
+#socws .rolebar button{flex:none;display:inline-flex;align-items:center;gap:8px;border:1.5px solid rgba(var(--rg),.55);background:rgba(var(--rg),.07);color:var(--rt);border-radius:11px;padding:8px 13px;font:700 13.5px/1.2 system-ui,sans-serif;cursor:pointer;transition:box-shadow .2s,background .2s,transform .2s}
+#socws .rolebar button:hover{background:rgba(var(--rg),.18);box-shadow:0 0 16px rgba(var(--rg),.55);transform:translateY(-1px)}
+#socws .rolebar button[aria-selected=true]{background:rgba(var(--rg),.26);border-color:var(--b);animation:socpulse 2.6s ease-in-out infinite}
+@keyframes socpulse{0%,100%{box-shadow:0 0 0 1px var(--b),0 0 12px rgba(var(--rg),.45)}50%{box-shadow:0 0 0 1px var(--b),0 0 28px rgba(var(--rg),.9)}}
+#socws .rolepane{animation:socin .3s ease both}#socws .rolepane[hidden]{display:none}
+@keyframes socin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#socws .card2{border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin:0 0 10px;background:var(--bg)}
+#socws .card2 .ch{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+#socws .card2 ul,#socws .card2 ol{margin:4px 0;padding-left:20px;font-size:13.5px}#socws .card2 .m2{font-size:12.5px;margin:3px 0;color:var(--fg)}
+#socws .fixes{margin-top:8px;font-size:13px}
+#socws .hf{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 10px;align-items:start}
+#socws .hf label{display:grid;gap:3px;font-size:12px;color:var(--mut)}#socws .hf input,#socws .hf select{width:100%}
+#socws .pbs{padding:4px 0;font-size:13.5px}#socws .pbs input{margin-right:6px;accent-color:var(--b)}
+#socws .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+#socws .rk{margin:0;padding-left:22px}#socws .rk li{margin:8px 0}
+#socws .outbox{margin:14px 16px 0;border:1px solid var(--bd2);border-radius:14px;padding:12px;background:var(--card)}
+#socws .outbox textarea{font:12.5px ui-monospace,Menlo,Consolas,monospace}
+#socws select:disabled{opacity:.6}
+</style>
+<div id="socws" role="dialog" aria-modal="true" aria-labelledby="socws-title" aria-hidden="true">
+<div class="ws" id="socws-body" data-role="analyst">
+<header class="wh"><div class="wt"><span class="ic" id="socws-ic" aria-hidden="true"></span><div><h2 id="socws-title">SOC Analyst workspace</h2><small id="socws-sub">Loading…</small></div></div><span id="socws-mode" class="badge b-off" role="status">Checking…</span><button type="button" class="xbtn" id="socws-refresh">Refresh</button><button type="button" class="xbtn" id="socws-close" aria-label="Close the SOC Analyst workspace">Close ✕</button></header>
+<nav class="rolebar" id="socws-roles" role="tablist" aria-label="SOC Team roles"></nav>
+<div id="socws-banners" aria-live="polite"></div>
+<div class="kpis" id="socws-kpis"></div>
+<div class="rolepane" id="rp-analyst" role="tabpanel" aria-labelledby="tab-analyst">
+<div class="grid">
+<section class="pn c6" aria-labelledby="h-al"><h3 id="h-al">Security alerts</h3><p class="sub">Detections raised by rules over stored events. Select one to investigate.</p><div class="rows" id="socws-alerts"></div></section>
+<section class="pn c6" aria-labelledby="h-sa"><h3 id="h-sa">Suspicious activity and potential attacks</h3><p class="sub">Related alerts grouped into incidents, with ATT&amp;CK tactics.</p><div class="rows" id="socws-inc"></div></section>
+<section class="pn c7" aria-labelledby="h-ev"><h3 id="h-ev">Windows Event Logs</h3><p class="sub">Most recent normalized events. Select one to analyze it.</p><div class="rows" id="socws-events"></div></section>
+<section class="pn c5" aria-labelledby="h-vu"><h3 id="h-vu">Vulnerability findings</h3><p class="sub">From imported Greenbone/OpenVAS reports, ranked by priority.</p><div class="bars" id="socws-bars"></div><div class="rows" id="socws-vulns"></div><div class="ctl" id="socws-importbox"></div></section>
+<section class="pn c6" aria-labelledby="h-id"><h3 id="h-id">Incident investigation and evidence</h3><p class="sub">Timeline of events, alerts, AI runs and analyst actions for the selected incident.</p><div id="socws-detail" class="empty">Select an incident to see its timeline and evidence.</div></section>
+<section class="pn c6" aria-labelledby="h-ai"><h3 id="h-ai">AI SOC Analyst <span class="badge b-imported" id="socws-aibadge">AI</span></h3><p class="sub">Ask about security events, vulnerabilities, malware, backdoors, unauthorized access or cyberattacks. Answers are hypotheses to verify, not verdicts.</p>
+<div class="ai-actions"><button type="button" class="abtn" id="b-inv"><span class="spin" aria-hidden="true"></span>Investigate Alert</button><button type="button" class="abtn" id="b-evt"><span class="spin" aria-hidden="true"></span>Analyze Event</button><button type="button" class="abtn" id="b-rep"><span class="spin" aria-hidden="true"></span>Generate Security Report</button></div>
+<div class="ask"><label for="socws-q" class="sub" style="margin:0">Ask the SOC Analyst</label><textarea id="socws-q" maxlength="2000" placeholder="e.g. Is this failed-logon pattern an attack? What would a backdoor on a Windows host look like in these events?"></textarea><div><button type="button" class="abtn" id="b-ask"><span class="spin" aria-hidden="true"></span>Ask</button></div></div>
+<div id="socws-st" class="st" role="status"></div><div id="socws-res" class="res" aria-live="polite" hidden></div></section>
+<section class="pn c12" aria-labelledby="h-lv"><h3 id="h-lv">Windows collectors and live event stream <span class="badge b-off" id="lv-badge">OFFLINE</span></h3><p class="sub" id="lv-sub">Connect to your SOC backend to see collectors and live events.</p><div id="lv-coll" class="ic-row"></div><div class="chips" style="margin:8px 0"><input id="lv-q" placeholder="Search text, user, IP, process" aria-label="Search events" style="flex:1 1 200px"><input id="lv-host" placeholder="Hostname" aria-label="Hostname filter" style="flex:0 1 140px"><input id="lv-id" placeholder="Event ID" aria-label="Event ID filter" style="flex:0 1 90px"><select id="lv-ch" aria-label="Channel"><option value="">All logs</option><option>Security</option><option>System</option><option>Application</option><option>Microsoft-Windows-Sysmon/Operational</option></select><select id="lv-sev" aria-label="Severity"><option value="">Any severity</option><option>critical</option><option>high</option><option>medium</option><option>low</option><option>info</option></select><button type="button" class="mini" id="lv-pause">Pause live</button></div><div class="rows" id="lv-rows" style="max-height:340px;overflow:auto"></div></section>
+<section class="pn c12" aria-labelledby="h-wz"><h3 id="h-wz">Wazuh connection <span class="badge b-off" id="wz-badge">NOT CONNECTED</span></h3><p class="sub">Real alerts and endpoint agents from your Wazuh Manager and Indexer. Read-only: Spark never sends active-response or configuration commands to Wazuh.</p><div id="socws-wz" class="ic-row"></div><div id="socws-wzres" class="res" aria-live="polite" hidden></div></section>
+<section class="pn c12" aria-labelledby="h-ds"><h3 id="h-ds">Data sources and integration health</h3><p class="sub">What is actually connected. Nothing here is marked connected unless data has really arrived.</p><div id="socws-integ" class="ic-row"></div>
+<details class="guide" id="socws-guide"><summary>How to connect real data sources</summary><ol><li>Deploy the Spark app on a server (for example Vercel) with a Supabase database. In Supabase run <code>supabase/003_soc.sql</code>.</li><li>Set these server environment variables: <code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>SOC_ADMIN_TOKEN</code> and <code>SOC_INGEST_TOKEN</code> (each token: 32+ random characters).</li><li>Open this workspace on that deployment and paste <code>SOC_ADMIN_TOKEN</code> when asked.</li><li>On a Windows computer you own or are authorized to monitor, run <code>collector/windows/Send-SecurityEvents.ps1</code> with your site URL and <code>SOC_INGEST_TOKEN</code>. It sends real Security, System and Defender events (read-only).</li><li>In Greenbone/OpenVAS download a report as XML or CSV and import it with the button in the Vulnerability panel. You will be asked to confirm you are authorized to test those hosts.</li><li>Full steps, tests and limits: <code>docs/SOC.md</code>.</li></ol></details></section>
+</div></div>
+<div id="rp-engineer" class="rolepane" role="tabpanel" aria-labelledby="tab-engineer" hidden></div><div id="rp-hunter" class="rolepane" role="tabpanel" aria-labelledby="tab-hunter" hidden></div><div id="rp-responder" class="rolepane" role="tabpanel" aria-labelledby="tab-responder" hidden></div><div id="rp-siem" class="rolepane" role="tabpanel" aria-labelledby="tab-siem" hidden></div><div id="rp-ciso" class="rolepane" role="tabpanel" aria-labelledby="tab-ciso" hidden></div><div id="rp-team" class="rolepane" role="tabpanel" aria-labelledby="tab-team" hidden></div>
+</div></div>
+<script>/*SOCWS_ENGINE*/</script>
+<script>(function(){
+var SAMPLE=/*SOCWS_SAMPLE*/null;
+var $=function(i){return document.getElementById(i)};
+var API="/api/soc",TK="socToken";
+var S={mode:"none",probe:"",data:null,details:{},integ:[],me:null,sel:{alert:null,incident:null,event:null},busy:false,opener:null,role:"analyst",picked:false,events:[],vulns:[],actions:[],hunt:null,huntMode:"",rsel:null,rdet:null,out:{}};
+var ISO=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function shift(o,d){if(typeof o==="string")return ISO.test(o)?new Date(Date.parse(o)+d).toISOString():o;if(Array.isArray(o))return o.map(function(x){return shift(x,d)});if(o&&typeof o==="object"){var r={};for(var k in o)r[k]=shift(o[k],d);return r}return o}
+function ago(iso){var s=(Date.now()-Date.parse(iso))/1000;if(!isFinite(s))return"";if(s<90)return"just now";if(s<5400)return Math.round(s/60)+" min ago";if(s<129600)return Math.round(s/3600)+" h ago";return Math.round(s/86400)+" d ago"}
+var SRC={live:["LIVE","b-live"],imported:["IMPORTED","b-imported"],demo:["SAMPLE","b-demo"]};
+function badge(s){var x=SRC[s]||SRC.live;return'<span class="badge '+x[1]+'" title="'+(s==="demo"?"Simulated sample data, not from a real system":s==="imported"?"Imported from a scan report file":"Received from a connected collector")+'">'+x[0]+'</span>'}
+function sev(s){return'<span class="sev s-'+esc(s)+'">'+esc(s)+'</span>'}
+function render(t){var h="",ul=false;String(t).split("\n").forEach(function(l){l=l.trim();if(!l)return;
+ if(/^#{1,3}\s/.test(l)){if(ul){h+="</ul>";ul=false}h+="<h4>"+esc(l.replace(/^#+\s*/,""))+"</h4>"}
+ else if(/^[-*]\s/.test(l)){if(!ul){h+="<ul>";ul=true}h+="<li>"+esc(l.replace(/^[-*]\s*/,"")).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")+"</li>"}
+ else{if(ul){h+="</ul>";ul=false}h+="<p>"+esc(l).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")+"</p>"}});if(ul)h+="</ul>";return h}
+function tok(){try{return sessionStorage.getItem(TK)||""}catch(e){return""}}
+async function api(method,path,body,raw){var h={};var t=tok();if(t)h.Authorization="Bearer "+t;var init={method:method,headers:h};
+ if(body!=null){if(raw){h["Content-Type"]=raw;init.body=body}else{h["Content-Type"]="application/json";init.body=JSON.stringify(body)}}
+ var ctl=new AbortController(),to=setTimeout(function(){ctl.abort()},method==="POST"&&path.indexOf("/agents")===0?100000:15000);init.signal=ctl.signal;
+ try{var res=await fetch(API+path,init);var ct=res.headers.get("content-type")||"";
+  if(ct.indexOf("json")<0){var e=new Error("No SOC backend at this address.");e.nobackend=true;throw e}
+  var j=await res.json();if(!res.ok){var er=new Error(j.error||("Request failed ("+res.status+")"));er.status=res.status;er.data=j;throw er}return j}finally{clearTimeout(to)}}
+
+var ANALYST_SYS="You are the AI SOC Analyst in a security operations center. Answer cybersecurity questions about security events, vulnerabilities, malware, backdoors, unauthorized access and cyberattacks. The data you are given is labeled SAMPLE: it is simulated and not from a real environment, so say that when you rely on it and never claim it shows a real compromise. Use only the data provided when you talk about 'these events'; do not invent hosts, IPs, CVEs or events. Give general security knowledge as general guidance. Present conclusions as hypotheses with a confidence level. Recommend defensive steps only; mark isolating hosts, disabling accounts, blocking IPs and scanning as needing human approval. Never provide exploit code, malware or intrusion steps. Use short headings that start with '## ' and '- ' bullets, under 450 words.";
+async function askAI(task,payload){var body=task+"\n\nSAMPLE DATA (simulated, not from a real environment):\n"+JSON.stringify(payload).slice(0,22000);
+ if(typeof claude!=="undefined"&&claude&&claude.use){var s=await claude.use("sample");var r=await s(ANALYST_SYS+"\n\n"+body,{modelTier:"complex",cache:false});return r.text}
+ var res=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mode:"analyst",text:body,context:"sample"})});var tx=await res.text();
+ if(!res.ok)throw new Error((res.status===404||res.status===405||tx.trim().charAt(0)==="<")?"The AI service is launching soon on this site. It needs the app server (see How to connect real data sources).":tx);return tx}
+
+window.SparkSOC={sample:function(){return(SAMPLE&&SAMPLE.overview&&SAMPLE.overview.activeIncidents||[]).map(function(i){return{id:i.id,title:i.title,severity:i.severity,host:i.host,status:i.status,source:"demo"}})}};
+function banner(cls,html){return'<div class="banner '+cls+'">'+html+'</div>'}
+function setBanners(h){$("socws-banners").innerHTML=h}
+function setMode(label,cls){var m=$("socws-mode");m.textContent=label;m.className="badge "+cls}
+
+function wzStep(x){return'<li><b style="color:'+(x.ok?"#3ddc84":"#ff7a90")+'">'+(x.ok?"PASS":"FAIL")+"</b> "+esc(x.name)+" - "+esc(x.detail)+"</li>"}
+async function paintWz(){var el=$("socws-wz"),bd=$("wz-badge");if(!el)return;
+ if(S.mode!=="connected"){bd.textContent="NOT CONNECTED";bd.className="badge b-off";el.innerHTML='<div class="ig"><span class="badge b-off">NO BACKEND</span><span>This page is not connected to a SOC backend, so no Wazuh data can be shown. Deploy the backend, then use the Wazuh bridge or the server settings described in docs/SOC-WAZUH.md.</span></div>';return}
+ var w;try{w=await api("GET","/wazuh/status")}catch(e){bd.textContent="UNKNOWN";bd.className="badge b-off";el.innerHTML='<div class="ig"><span class="badge b-off">UNAVAILABLE</span><span>'+esc(e.message)+"</span></div>";return}
+ var map={healthy:["LIVE","b-live"],stale:["STALE","b-demo"],configured:["CONFIGURED, NOT SYNCED","b-demo"],error:["ERROR","b-off"],not_connected:["NOT CONNECTED","b-off"]}[w.status]||[w.status,"b-off"];bd.textContent=map[0];bd.className="badge "+map[1];
+ var a=w.agents,h='<div class="ig"><span class="badge '+map[1]+'">'+map[0]+"</span><span><b>"+esc(w.detail)+"</b><br><span style=\"color:var(--mut)\">"+(w.manager?"Wazuh "+esc(w.manager)+" · ":"")+(w.mode?esc(w.mode)+" mode · ":"")+(a?"Endpoint agents: "+a.active+" online, "+a.disconnected+" offline, "+(a.pending+a.never)+" not yet connected · ":"")+w.eventsLive+" real event(s) stored"+(w.eventsTest?" · "+w.eventsTest+" TEST event(s) (demo)":"")+(w.lastAlertAt?" · newest alert "+esc(ago(w.lastAlertAt)):"")+"</span></span></div>";
+ if(w.lastTest){h+='<div class="ig"><span class="badge '+(w.lastTest.ok?"b-live":"b-off")+'">'+(w.lastTest.ok?"TEST PASSED":"TEST FAILED")+'</span><span><b>Connection test</b> ('+esc(w.lastTest.mode)+", "+esc(ago(w.lastTest.at))+')<ul style="margin:.3em 0 0 1.1em">'+w.lastTest.steps.map(wzStep).join("")+"</ul></span></div>"}
+ h+='<div class="ig"><span class="badge b-off">ACTIONS</span><span><button type="button" class="nbtn" data-wz="test/connection">Test connection</button> <button type="button" class="nbtn" data-wz="sync">Sync now</button> <button type="button" class="nbtn" data-wz="test/event">Send security event test</button> <button type="button" class="nbtn" data-wz="test/cleanup">Remove test data</button><br><span style="color:var(--mut)">Test connection and the event test need the admin token. The event test creates one clearly marked <b>TEST</b> alert (demo data) so you can see ingestion, detection and incident correlation work; it is never counted as live data.</span></span></div>';
+ el.innerHTML=h}
+document.addEventListener("click",async function(ev){var b=ev.target.closest&&ev.target.closest("[data-wz]");if(!b)return;var r=$("socws-wzres");b.disabled=true;r.hidden=false;r.textContent="Working…";
+ try{var o=await api("POST","/wazuh/"+b.dataset.wz),h="";if(o.steps)h='<b>'+(o.ok?"All steps passed.":"Some steps failed.")+"</b>"+(o.label?" "+esc(o.label):"")+'<ul style="margin:.3em 0 0 1.1em">'+o.steps.map(wzStep).join("")+"</ul>";else if(o.accepted!=null)h="<b>Sync finished.</b> "+o.agents+" agent(s), "+o.received+" alert(s) read, "+o.accepted+" stored, "+o.newAlerts+" new detection(s), "+o.incidentsTouched+" incident(s) touched. Requests to Wazuh were "+(o.readOnly?"read-only.":"NOT all read-only - check the audit log.");else h="Done.";r.innerHTML=h}
+ catch(e){r.innerHTML="<b>Failed:</b> "+esc(e.message)}b.disabled=false;try{await paintWz()}catch(e){}});
+function showSample(){var d=Date.now()-Date.parse(SAMPLE.generatedAt);S.mode="sample";S.data=shift(SAMPLE.overview,d);S.details=shift(SAMPLE.details,d);
+ S.integ=[{id:"windows_events",name:"Windows Event Logs (collector)",status:"not_connected",detail:"No collector is sending events to this page."},{id:"greenbone",name:"Greenbone / OpenVAS (report import)",status:"not_connected",detail:"No report imported."},{id:"ai",name:"AI agents",status:typeof claude!=="undefined"?"configured":"not_connected",detail:typeof claude!=="undefined"?"AI answers use the sample data above.":"Needs the app server with an Anthropic key."},{id:"siem",name:"SIEM / firewall / endpoint APIs",status:"not_implemented",detail:"Not built yet."}];
+ setMode("SAMPLE DATA","b-demo")}
+async function load(){
+ $("socws-sub").textContent="Loading…";setMode("Loading…","b-off");S.sel={alert:null,incident:null,event:null};S.hunt=null;S.rsel=null;S.rdet=null;var bn="";
+ try{var me=await api("GET","/me");S.me=me;S.probe="ok"}catch(e){S.me=null;S.probe=e.nobackend||!e.status?"none":e.status===401?"auth":"error";S.err=e}
+ if(S.probe==="ok"){
+  try{var o=await api("GET","/overview?scope=all"),i=await api("GET","/integrations");S.data=o;S.integ=i.integrations;S.details={};S.events=[];S.vulns=[];S.actions=[];try{S.events=await api("GET","/events?limit=1000")}catch(e){}try{S.vulns=await api("GET","/vulns?limit=500")}catch(e){}try{S.actions=await api("GET","/actions")}catch(e){}
+   var p=o.present,real=p.live.events+p.live.alerts+p.imported.vulns,demo=p.demo.events+p.demo.vulns+p.demo.alerts;
+   if(real){S.mode="connected";setMode(demo?"CONNECTED + SAMPLE":"CONNECTED","b-live");if(demo)bn+=banner("sample","<b>Sample data is mixed in.</b> Rows marked SAMPLE are simulated. ")}
+   else if(demo){S.mode="connected";setMode("SAMPLE DATA","b-demo");bn+=banner("sample","<b>Connected, but only sample data is present.</b> No real events or scan results have arrived yet. "+" See <i>How to connect real data sources</i> below.")}
+   else{S.mode="connected";setMode("CONNECTED · NO DATA","b-imported");bn+=banner("info","<b>Connected to your SOC backend, but it holds no data yet.</b> Connect the Windows collector and import a Greenbone report (see below). "+'Want to explore the dashboard first? <button type="button" class="mini" id="demo-view">Preview with SAMPLE data</button> <small>(shown in your browser only, nothing is stored)</small>')}
+  }catch(e){showSample();bn+=banner("bad","<b>Could not read the SOC backend:</b> "+esc(e.message||"error")+". Showing SAMPLE data instead.")}
+ }else{
+  showSample();
+  if(S.probe==="auth")bn+=banner("sample","<b>You are looking at SAMPLE data.</b> A SOC backend exists on this site but needs a sign-in. Enter an API token to see your real data.<form id=\"tokform\"><label class=\"sub\" for=\"tokin\" style=\"margin:0;align-self:center\">API token</label><input type=\"password\" id=\"tokin\" autocomplete=\"off\" placeholder=\"socs_… or admin token\" style=\"flex:1 1 220px\"><button type=\"submit\" class=\"xbtn\">Connect</button></form>"+(S.err&&S.err.message&&tok()?"<br><small>"+esc(S.err.message)+"</small>":""));
+  else bn+=banner("sample","<b>You are looking at SAMPLE data.</b> No SOC backend is connected to this website, so there are no real alerts, logs or scan results to show, and nothing here is a live integration. To connect real sources, open <i>How to connect real data sources</i> at the bottom of this page.");
+ }
+ setBanners(bn);LV.last=null;paint();if(S.mode==="connected")startLive();else if(LV.timer){clearInterval(LV.timer);LV.timer=null}
+ var t=$("tokform");if(t)t.onsubmit=function(ev){ev.preventDefault();try{sessionStorage.setItem(TK,$("tokin").value.trim())}catch(e){}load()};
+
+ var dv=$("demo-view");if(dv)dv.onclick=function(){showSample();setBanners(banner("sample","<b>You are previewing SAMPLE data.</b> It is simulated, run through the real detection engine, and is not from your systems. <button type=\"button\" class=\"mini\" id=\"demo-back\">Back to my data</button>"));paint();var b=$("demo-back");if(b)b.onclick=load};
+}
+
+var LV={paused:false,timer:null,last:null,n:0,coll:[]};
+function lvMatch(e){var q=($("lv-q").value||"").toLowerCase(),h=($("lv-host").value||"").toLowerCase(),id=($("lv-id").value||"").trim(),ch=$("lv-ch").value,sv=$("lv-sev").value;
+ if(h&&String(e.host).toLowerCase().indexOf(h)<0)return false;if(id&&String(e.eventId)!==id)return false;if(ch&&e.channel!==ch)return false;if(sv&&(e.severity||"info")!==sv)return false;
+ if(q&&[e.summary,e.user,e.targetUser,e.srcIp,e.process,e.commandLine,e.provider].join(" ").toLowerCase().indexOf(q)<0)return false;return true}
+function paintLive(){var b=$("lv-badge"),sub=$("lv-sub");if(!b)return;
+ if(S.mode!=="connected"){b.textContent="NOT CONNECTED";b.className="badge b-off";sub.textContent="No SOC backend is connected, so there are no collectors or live events. Sample events elsewhere on this page are simulated.";$("lv-coll").innerHTML="";$("lv-rows").innerHTML="";return}
+ b.textContent=LV.paused?"PAUSED":"LIVE \u00b7 polling every 5 s";b.className="badge "+(LV.paused?"b-demo":"b-live");
+ sub.textContent="Events are fetched from the backend by ingestion time. Last poll: "+(LV.polled?new Date(LV.polled).toLocaleTimeString():"not yet")+". Stored events: "+evs().length+".";
+ $("lv-coll").innerHTML=LV.coll.length?LV.coll.map(function(c){var cls=c.status==="connected"?"b-live":c.status==="stale"?"b-demo":"b-off";return'<div class="ig"><span class="badge '+cls+'">'+esc(c.status.toUpperCase())+'</span> <b>'+esc(c.host)+'</b><span class="m">last contact '+(c.lastContactAt?esc(ago(c.lastContactAt)):"never")+(c.lastEventAt?" \u00b7 last event "+esc(ago(c.lastEventAt)):"")+(c.version?" \u00b7 collector "+esc(c.version):"")+(c.os?" \u00b7 "+esc(c.os):"")+'</span></div>'}).join(""):'<div class="empty">No Windows collector has contacted the backend yet. Install it with collector/windows/Send-SecurityEvents.ps1 (see its README).</div>';
+ var list=evs().filter(function(e){return e.source!=="demo"}).filter(lvMatch).sort(function(a,b){return a.time<b.time?1:-1}).slice(0,150);
+ $("lv-rows").innerHTML=list.length?list.map(function(e){return'<div class="row" style="cursor:default"><span class="ev">'+esc(e.eventId)+"</span>"+(e.severity?sev(e.severity):"")+'<span class="t">'+esc(e.summary)+'<span class="m">'+esc(e.host)+" \u00b7 "+esc(e.channel)+" \u00b7 "+esc(new Date(e.time).toLocaleString())+(e.user?" \u00b7 "+esc(e.user):"")+(e.srcIp?" \u00b7 "+esc(e.srcIp):"")+"</span></span></div>"}).join(""):'<div class="empty">No real events match. Events from the Windows collector appear here as they arrive.</div>'}
+async function refreshIncs(){if(S.mode!=="connected")return;try{var L2=await api("GET","/incidents"),m={};L2.forEach(function(x){m[x.id]=x});S.incMap=m;(S.data.activeIncidents||[]).forEach(function(i){var x=m[i.id];if(x){i.displayStatus=x.displayStatus;i.owner=x.owner;i.assignedAgents=x.assignedAgents;i.pendingApprovals=x.pendingApprovals}});paintIncRows()}catch(e){}}
+function paintIncRows(){document.querySelectorAll("#socws-inc .row[data-inc]").forEach(function(r){var i=(S.data.activeIncidents||[]).filter(function(x){return x.id===r.dataset.inc})[0];if(!i||!i.displayStatus)return;var m=r.querySelector(".m");if(m&&m.textContent.indexOf("\u25cf")<0)m.insertAdjacentHTML("beforeend",' \u00b7 <b>\u25cf '+esc(i.displayStatus)+"</b> \u00b7 owner "+esc(i.owner||"unassigned")+(i.assignedAgents&&i.assignedAgents.length?" \u00b7 agents "+esc(i.assignedAgents.join(", ")):""))})}
+async function pollLive(){if(S.mode!=="connected"||LV.paused||document.hidden)return;
+ try{LV.coll=await api("GET","/collectors");var since=LV.last||(function(){var m="";evs().forEach(function(e){if(e.ingestedAt&&e.ingestedAt>m)m=e.ingestedAt});return m})();
+  var rows=await api("GET","/events?limit=500"+(since?"&since="+encodeURIComponent(since):""));
+  if(rows.length){var have={};S.events.forEach(function(e){have[e.id]=1});var add=rows.filter(function(e){return!have[e.id]});S.events=add.concat(S.events).slice(0,3000);rows.forEach(function(e){if(!LV.last||e.ingestedAt>LV.last)LV.last=e.ingestedAt});LV.n+=add.length;
+   if(add.length){try{S.data=await api("GET","/overview?scope=all")}catch(e){}paint()}}
+  await refreshIncs();
+  LV.polled=Date.now();paintLive()}catch(e){LV.polled=Date.now();$("lv-sub").textContent="Live poll failed: "+(e.message||"error")+". Will retry."}}
+function startLive(){if(LV.timer)clearInterval(LV.timer);LV.timer=setInterval(pollLive,5000);pollLive()}
+document.addEventListener("input",function(ev){if(ev.target.closest&&ev.target.closest("#lv-q,#lv-host,#lv-id,#lv-ch,#lv-sev"))paintLive()});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest("#lv-pause");if(b){LV.paused=!LV.paused;b.textContent=LV.paused?"Resume live":"Pause live";paintLive();if(!LV.paused)pollLive()}});
+function paint(){var d=S.data;if(!d)return;var sub=S.mode==="sample"?"Sample data · simulated, for exploring the dashboard":"Updated "+ago(d.generatedAt)+(S.me?" · signed in as "+esc(S.me.actor)+" ("+esc(S.me.role)+")":"");$("socws-sub").innerHTML=sub;
+ var vc=d.vulnCounts;
+
+  var A=$("socws-alerts");A.innerHTML=d.recentAlerts.length?d.recentAlerts.map(function(a){return'<div class="row" role="button" tabindex="0" data-alert="'+esc(a.id)+'" aria-pressed="'+(S.sel.alert===a.id)+'">'+sev(a.severity)+'<span class="t">'+esc(a.title)+'<span class="m">'+esc(a.host)+" · "+esc((a.mitre||[]).map(function(m){return m.id}).join(", "))+" · "+esc(ago(a.lastSeen))+" · conf "+Math.round(a.confidence*100)+"%</span></span><span>"+badge(a.source)+' <button type="button" class="mini" data-inv-alert="'+esc(a.id)+'">Investigate</button></span></div>'}).join(""):'<div class="empty">No alerts. '+(S.mode==="connected"?"Alerts appear when real events match a detection rule.":"")+"</div>";
+ var I=$("socws-inc");I.innerHTML=d.activeIncidents.length?d.activeIncidents.map(function(i){return'<div class="row" role="button" tabindex="0" data-inc="'+esc(i.id)+'" aria-pressed="'+(S.sel.incident===i.id)+'">'+sev(i.severity)+'<span class="t">'+esc(i.title)+'<span class="m">'+esc(i.host)+" · "+esc(i.status)+" · "+esc((i.tactics||[]).join(" → "))+"</span></span>"+badge(i.source)+"</div>"}).join(""):'<div class="empty">No active incidents.</div>';
+ var E=$("socws-events");E.innerHTML=d.recentEvents.length?d.recentEvents.map(function(e){return'<div class="row" role="button" tabindex="0" data-evt="'+esc(e.id)+'" aria-pressed="'+(S.sel.event===e.id)+'"><span class="ev">'+esc(e.eventId)+'</span><span class="t">'+esc(e.summary)+'<span class="m">'+esc(e.host)+(e.srcIp?" · "+esc(e.srcIp):"")+" · "+esc(ago(e.time))+"</span></span><span>"+badge(e.source)+' <button type="button" class="mini" data-an-evt="'+esc(e.id)+'">Analyze</button></span></div>'}).join(""):'<div class="empty">No events yet. '+(S.mode==="connected"?"Install the Windows collector to send real events.":"")+"</div>";
+ var tot=Math.max(1,vc.critical,vc.high,vc.medium,vc.low);$("socws-bars").innerHTML=["critical","high","medium","low"].map(function(k){return'<div class="bar"><span>'+k+'</span><i class="s-'+k+'" style="width:'+Math.round(vc[k]/tot*100)+'%"></i><span>'+vc[k]+"</span></div>"}).join("");
+ $("socws-vulns").innerHTML=d.topVulns.length?d.topVulns.slice(0,12).map(function(v){return'<div class="row" style="cursor:default">'+sev(v.severity)+'<span class="t">'+esc(v.name)+'<span class="m">'+esc(v.host)+" · "+esc(v.port)+" · CVSS "+Number(v.cvss).toFixed(1)+" · priority "+v.priority+(v.kev?" · KNOWN EXPLOITED":"")+(v.cves&&v.cves.length?" · "+esc(v.cves.slice(0,2).join(", ")):"")+"</span></span>"+badge(v.source)+"</div>"}).join(""):'<div class="empty">No vulnerability findings. '+(S.mode==="connected"?"Import a Greenbone report to see real findings.":"")+"</div>";
+ var ib=$("socws-importbox");ib.innerHTML=S.mode==="connected"&&S.me&&S.me.role!=="viewer"?'<label class="mini" style="display:inline-block">Import Greenbone report (.xml / .csv)<input type="file" id="gbfile" accept=".xml,.csv,text/xml,text/csv" style="display:none"></label>':"";
+ var gf=$("gbfile");if(gf)gf.onchange=importGb;
+ paintWz();
+ $("socws-integ").innerHTML=S.integ.map(function(x){var cls=/healthy|connected|imported/.test(x.status)?"b-live":/configured|stale|volatile/.test(x.status)?"b-demo":"b-off";var lbl={healthy:"HEALTHY",connected:"CONNECTED",imported:"IMPORTED",configured:"CONFIGURED",stale:"STALE",volatile:"DEV STORE",not_connected:"NOT CONNECTED",not_implemented:"NOT BUILT YET",error:"ERROR"}[x.status]||x.status;return'<div class="ig"><span class="badge '+cls+'">'+esc(lbl)+"</span><span><b>"+esc(x.name)+"</b><br><span style=\"color:var(--mut)\">"+esc(x.detail)+(x.lastSuccess?" · last data "+esc(ago(x.lastSuccess)):"")+"</span></span></div>"}).join("");
+ var ab=$("socws-aibadge");ab.textContent=S.mode==="sample"?"SAMPLE DATA":"AI · evidence-checked";ab.className="badge "+(S.mode==="sample"?"b-demo":"b-imported");
+ paintLive(); paintRole();if(S.mode==="connected"&&S.data.activeIncidents.some(function(i){return!i.displayStatus}))refreshIncs();
+}
+async function importGb(ev){var f=ev.target.files[0];if(!f)return;var txt=await f.text(),attest=false;
+ for(var n=0;n<2;n++){try{var r=await api("POST","/import/greenbone"+(attest?"?attest=true":""),txt,/csv$/i.test(f.name)?"text/csv":"application/xml");alert("Imported "+r.scan.findings+" findings ("+r.scan.newFindings+" new, "+r.scan.fixedVerified+" verified fixed).");break}
+  catch(e){if(e.status===409&&e.data&&e.data.unauthorizedHosts&&!attest){if(confirm("These hosts are not yet marked as authorized:\n\n"+e.data.unauthorizedHosts.join("\n")+"\n\nConfirm that you own them or have written permission to test them?")){attest=true;continue}break}alert(e.message);break}}
+ ev.target.value="";load()}
+async function openIncident(id){S.sel.incident=id;paint();var box=$("socws-detail");box.innerHTML='<div class="empty">Loading…</div>';
+ try{var r=S.mode==="connected"?await api("GET","/incidents/"+encodeURIComponent(id)):S.details[id];if(!r)throw new Error("No details.");
+  var i=r.incident,h='<div style="margin-bottom:8px">'+sev(i.severity)+" "+badge(i.source)+' <b>'+esc(i.title)+"</b></div><div class=\"chips\"><span class=\"chip\">host "+esc(i.host)+'</span><span class="chip">status '+esc(i.displayStatus||i.status)+'</span>'+(S.mode==="connected"?'<span class="chip">owner '+esc(i.owner||"unassigned")+'</span><span class="chip">agents '+esc((i.assignedAgents||[]).join(", ")||"none yet")+'</span><span class="chip">pending approvals '+(i.pendingApprovals||0)+'</span>':"")+'<span class="chip">confidence '+Math.round(i.confidence*100)+'%</span>'+(i.tactics||[]).map(function(t){return'<span class="chip">'+esc(t)+"</span>"}).join("")+"</div><p style=\"font-size:13px\">"+esc(i.reasoning)+"</p>";
+  if(i.verification)h+='<div class="banner info" style="margin:8px 0">Verification: <b>'+esc(i.verification.status)+"</b><br>"+esc(i.verification.details.join(" "))+"</div>";
+  h+='<div class="nd">'+(r.timeline||[]).map(function(t){return'<div class="e"><b>'+esc(t.title)+"</b>"+(t.source?" "+badge(t.source):"")+"<small>"+esc(new Date(t.time).toLocaleString())+(t.detail?" · "+esc(t.detail).slice(0,420):"")+"</small></div>"}).join("")+"</div>";
+  if(S.mode==="connected"&&S.me&&S.me.role!=="viewer"){h+='<div class="ctl"><label class="sub" for="stsel" style="margin:0">Status</label><select id="stsel">'+["open","investigating","contained","remediated","closed"].map(function(s){return"<option"+(s===i.status?" selected":"")+">"+s+"</option>"}).join("")+'</select><input type="text" id="stnote" placeholder="Note (required to reopen or force-close)" style="flex:1 1 180px"><button type="button" class="mini" id="stgo">Update</button><button type="button" class="mini" id="stver">Verify remediation</button></div><div class="ctl"><label class="sub" for="ownin" style="margin:0">Owner</label><input type="text" id="ownin" value="'+esc(i.owner||"")+'" placeholder="Person responsible" maxlength="60" style="flex:1 1 180px"><button type="button" class="mini" id="owngo">Assign owner</button></div>';
+   if((r.actions||[]).length)h+='<h4 style="margin:12px 0 4px;color:var(--b);font-size:14px">Proposed response actions (need human approval)</h4>'+r.actions.map(function(a){return'<div class="row" style="cursor:default;grid-template-columns:minmax(0,1fr) auto"><span class="t"><b>'+esc(a.type)+"</b> → "+esc(a.target)+" · "+esc(a.status)+'<span class="m">'+esc(a.description)+"</span></span><span>"+(a.status==="proposed"&&S.me.role==="admin"?'<button type="button" class="mini" data-act="approve" data-id="'+esc(a.id)+'">Approve</button> <button type="button" class="mini" data-act="reject" data-id="'+esc(a.id)+'">Reject</button>':"")+"</span></div>"}).join("")+'<p class="sub">Approval is only recorded. Spark does not isolate, block or disable anything itself.</p>'}
+  box.innerHTML=h;box.className="";
+  var og=$("owngo");if(og)og.onclick=async function(){try{await api("PATCH","/incidents/"+encodeURIComponent(id),{owner:$("ownin").value});await refreshKeep(id);await refreshIncs()}catch(e){alert(e.message)}};
+  var go=$("stgo");if(go)go.onclick=async function(){try{await api("PATCH","/incidents/"+encodeURIComponent(id),{status:$("stsel").value,note:$("stnote").value,force:!!$("stnote").value.trim()&&$("stsel").value==="closed"});await refreshKeep(id)}catch(e){alert(e.message)}};
+  var vv=$("stver");if(vv)vv.onclick=async function(){try{await api("POST","/incidents/"+encodeURIComponent(id)+"/verify");await refreshKeep(id)}catch(e){alert(e.message)}};
+  box.querySelectorAll("[data-act]").forEach(function(b){b.onclick=async function(){try{await api("POST","/actions/"+b.dataset.id+"/"+b.dataset.act,{});await refreshKeep(id)}catch(e){alert(e.message)}}});
+ }catch(e){box.innerHTML='<div class="empty">'+esc(e.message)+"</div>"}}
+async function refreshKeep(id){var o=await api("GET","/overview?scope=all");S.data=o;paint();openIncident(id)}
+
+function busy(scope,btn,on,label,st){S.busy=on;[].forEach.call(scope.querySelectorAll(".abtn"),function(b){b.disabled=on;b.setAttribute("aria-busy",on&&b===btn?"true":"false")});if(on){st.className="st";st.textContent=label}else if(st.className.indexOf("er")<0){st.textContent=""}}
+function showRun(run,res){var o=run.output,r=res||$("socws-res");r.hidden=false;var h="";
+ if(run.status==="unavailable"||run.status==="error"){h='<div class="banner bad"><b>'+(run.status==="unavailable"?"AI agents are not connected.":"The AI request failed.")+"</b> "+esc(run.summary)+(run.error?" ("+esc(run.error)+")":"")+"</div>";h+='<p class="cap">'+run.evidenceIds.length+" evidence item(s) were gathered from stored data, but no AI conclusion was drawn.</p>"}
+ else{h+=(run.source==="demo"?'<div class="banner sample" style="margin:0 0 8px">This analysis is based on SAMPLE data.</div>':"")+"<p>"+esc(o.summary)+"</p>";
+  if(o.analysis)h+=render(o.analysis);
+  if(o.findings.length)h+="<h4>Findings (hypotheses)</h4><ul>"+o.findings.map(function(f){return"<li>"+(f.supported?"":'<span class="badge b-off" title="No valid evidence was cited for this claim">UNSUPPORTED</span> ')+esc(f.claim)+' <span class="chip">'+esc(f.confidence)+" confidence</span>"+f.evidenceIds.map(function(e){return' <span class="ev" title="Evidence ID">'+esc(e.slice(0,12))+"</span>"}).join("")+"</li>"}).join("")+"</ul>";
+  if(o.recommendations.length)h+="<h4>Recommended remediation</h4><ul>"+o.recommendations.map(function(x){return"<li><b>"+esc(x.priority)+"</b> · "+esc(x.action)+(x.target?" <span class=\"chip\">"+esc(x.target)+"</span>":"")+(x.disruptive?' <span class="badge b-demo">NEEDS HUMAN APPROVAL</span>':"")+(x.rationale?"<br><small style=\"color:var(--mut)\">"+esc(x.rationale)+"</small>":"")+"</li>"}).join("")+"</ul>";
+  if(o.limitations.length)h+="<h4>Limitations</h4><ul>"+o.limitations.map(function(x){return"<li>"+esc(x)+"</li>"}).join("")+"</ul>";
+  h+='<p class="cap">AI-generated hypotheses to verify, not verdicts. Model '+esc(run.model||"")+" · "+run.evidenceIds.length+" evidence items supplied"+(run.invalidEvidenceIds.length?" · "+run.invalidEvidenceIds.length+" cited ID(s) did not exist and were discarded":"")+".</p>"}
+ r.innerHTML=h;try{r.scrollIntoView({behavior:"smooth",block:"nearest"})}catch(e){}}
+function showText(t,res){var r=res||$("socws-res");r.hidden=false;r.innerHTML='<div class="banner sample" style="margin:0 0 8px">This answer is based on SAMPLE data and general security knowledge, not on your systems.</div>'+render(t)+'<p class="cap">AI-generated. Verify before acting.</p>';try{r.scrollIntoView({behavior:"smooth",block:"nearest"})}catch(e){}}
+async function refreshActions(){try{S.actions=await api("GET","/actions");paintActs();paintKpis()}catch(e){}}
+async function run(btn,label,agent,target,question,sampleTask,samplePayload,role){role=role||"analyst";var an=role==="analyst",pane=$("rp-"+role),st=$(an?"socws-st":"st-"+role),res=$(an?"socws-res":"res-"+role);
+ if(S.busy)return;busy(pane,btn,true,label,st);
+ try{if(S.mode==="connected"){var r=await api("POST","/agents/run",{agent:agent,target:target||"",question:question||""});showRun(r.run,res);if(an){if(S.sel.incident)openIncident(S.sel.incident)}else if(role==="responder")refreshActions()}
+  else showText(await askAI(sampleTask,samplePayload),res)}
+ catch(e){st.textContent=e.message||"Request failed.";st.className="st er"}
+ busy(pane,btn,false,"",st)}
+function topIncident(){return S.data&&S.data.activeIncidents[0]}
+function onInvestigate(id){var d=S.data,al=id&&d.recentAlerts.filter(function(a){return a.id===id})[0],inc=id&&d.activeIncidents.filter(function(i){return i.id===id})[0];
+ if(!al&&!inc){al=d.recentAlerts.filter(function(a){return a.id===S.sel.alert})[0];inc=d.activeIncidents.filter(function(i){return i.id===S.sel.incident})[0]}
+ if(!al&&!inc){inc=topIncident();if(!inc){$("socws-st").textContent="There are no alerts or incidents to investigate yet.";return}$("socws-st").textContent="Nothing selected, so the highest-severity incident was used.";}
+ var target=al?al.id:inc.id,pl=al?{alert:al,incident:d.activeIncidents.filter(function(i){return i.id===al.incidentId})[0],evidenceEvents:d.recentEvents.filter(function(e){return(al.eventIds||[]).indexOf(e.id)>=0})}:{incident:inc,details:S.details[inc.id]&&S.details[inc.id].timeline};
+ if(inc&&!al)openIncident(inc.id);if(al&&al.incidentId)openIncident(al.incidentId);
+ run($("b-inv"),"The SOC Analyst is investigating…","soc_analyst",target,$("socws-q").value,"Investigate this alert or incident: what likely happened, how confident the evidence makes you, what to check next, and recommended remediation. "+($("socws-q").value||""),pl)}
+function onAnalyze(id){var d=S.data,eid=id||S.sel.event||(d.recentEvents[0]&&d.recentEvents[0].id);if(!eid){$("socws-st").textContent="There are no events to analyze yet.";return}
+ var ev=d.recentEvents.filter(function(e){return e.id===eid})[0];if(!id&&!S.sel.event)$("socws-st").textContent="No event selected, so the most recent one was used.";
+ var near=ev?d.recentEvents.filter(function(e){return e.host===ev.host&&Math.abs(Date.parse(e.time)-Date.parse(ev.time))<=600000}):[];
+ run($("b-evt"),"The SOC Analyst is analyzing the event…","soc_analyst",eid,$("socws-q").value,"Analyze this event and the events around it on the same host. Is it routine or suspicious, and why? "+($("socws-q").value||""),{event:ev,nearbyEvents:near})}
+function onReport(){run($("b-rep"),"Generating the security report…","security_advisor","all",$("socws-q").value,"Write a concise security report for this environment: posture, top risks, what changed, and the 3 to 5 most valuable actions. "+($("socws-q").value||""),{posture:S.data.posture,incidents:S.data.activeIncidents,vulnCounts:S.data.vulnCounts,topVulns:S.data.topVulns.slice(0,8),assets:S.data.assets.map(function(a){return{host:a.hostname,riskScore:a.score}})})}
+function onAsk(){var q=$("socws-q").value.trim();if(!q){$("socws-st").textContent="Type a question first.";$("socws-st").className="st er";return}
+ run($("b-ask"),"The SOC Analyst is preparing an answer…","soc_analyst","",q,"Analyst question: "+q,{incidents:S.data.activeIncidents.slice(0,5),alerts:S.data.recentAlerts.slice(0,8),events:S.data.recentEvents.slice(0,12),vulns:S.data.topVulns.slice(0,6),vulnCounts:S.data.vulnCounts})}
+
+/*SOCWS_ROLESJS*/
+/*SOCWS_CONSOLE*/
+/*SOCWS_ORCH*/
+function open(opener,role){S.opener=opener||document.activeElement;S.picked=true;var w=$("socws");w.classList.add("open");w.setAttribute("aria-hidden","false");document.body.style.overflow="hidden";w.scrollTop=0;setRole(role||"analyst");load();setTimeout(function(){$("socws-close").focus()},30)}
+function close(){var w=$("socws");w.classList.remove("open");w.setAttribute("aria-hidden","true");document.body.style.overflow="";try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}if(S.opener&&S.opener.focus)S.opener.focus()}
+document.addEventListener("click",function(e){var t=e.target;
+ var hot=t.closest&&t.closest(".soc-hot,#socHot2,#socHot3");if(hot){e.preventDefault();open(hot,hot.dataset.role||"analyst");return}
+ if(!t.closest||!t.closest("#socws"))return;
+ var bi=t.closest("[data-inv-alert]");if(bi){e.stopPropagation();S.sel.alert=bi.dataset.invAlert;paint();onInvestigate(bi.dataset.invAlert);return}
+ var be=t.closest("[data-an-evt]");if(be){e.stopPropagation();S.sel.event=be.dataset.anEvt;paint();onAnalyze(be.dataset.anEvt);return}
+ var ra=t.closest("[data-alert]");if(ra){S.sel.alert=ra.dataset.alert;var al=S.data.recentAlerts.filter(function(a){return a.id===ra.dataset.alert})[0];paint();if(al&&al.incidentId)openIncident(al.incidentId);return}
+ var ri=t.closest("[data-inc]");if(ri){openIncident(ri.dataset.inc);return}
+ var re=t.closest("[data-evt]");if(re){S.sel.event=re.dataset.evt;paint();return}});
+document.addEventListener("keydown",function(e){var w=$("socws");if(!w.classList.contains("open"))return;
+ if(e.key==="Escape"){e.preventDefault();close();return}
+ if((e.key==="Enter"||e.key===" ")&&e.target&&e.target.getAttribute&&e.target.getAttribute("role")==="button"&&e.target.closest("#socws")){e.preventDefault();e.target.click();return}
+ if(e.key==="Tab"){var f=[].slice.call(w.querySelectorAll('button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex="0"]')).filter(function(x){return x.offsetParent!==null});if(!f.length)return;var a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}}});
+$("socws-close").onclick=close;$("socws-refresh").onclick=load;$("socws").addEventListener("mousedown",function(e){if(e.target.id==="socws")close()});
+$("b-inv").onclick=function(){onInvestigate()};$("b-evt").onclick=function(){onAnalyze()};$("b-rep").onclick=onReport;$("b-ask").onclick=onAsk;
+/*SOCWS_ROLES_INIT_JS*/
+})();</script>
+<!--SOCWS-END-->
