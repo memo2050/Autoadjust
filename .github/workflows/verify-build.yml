@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths: [package.json, package-lock.json, scripts/**, .github/workflows/verify-build.yml]
-permissions: { contents: write }   # only used by the 'commit lockfile' step below, on branches of this same repository
+permissions: { contents: read }   # read-only: this workflow never writes to the repository
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with: { ref: "${{ github.head_ref || github.ref }}" }   # the branch itself (not the merge commit), so the lockfile commit lands on the branch
+        with: { ref: "${{ github.head_ref || github.ref }}" }
       - uses: actions/setup-node@v4
         with: { node-version: "20.19.0" }
       - name: Run the complete verification (all logs kept, nothing suppressed)
@@ -24,11 +24,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with: { name: package-lock, path: package-lock.json, if-no-files-found: ignore }
-      - name: Commit the verified lockfile to the branch (same-repo branches only; only after the verification PASSED)
-        if: success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'claude/')
+      - name: Check the committed lockfile is exactly what a clean install produces
+        if: success()
         run: |
           if git status --porcelain package-lock.json | grep -q .; then
-            git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json; git commit -m "Add package-lock.json generated and verified by CI (verify-build passed)"
-            git push origin "HEAD:${{ github.head_ref }}"
-          else echo "lockfile already committed and unchanged"; fi
+            echo "::error::package-lock.json differs from the verified one. Download the 'package-lock' artifact of this run, review it and commit it yourself."; git --no-pager diff --stat package-lock.json; exit 1
+          else echo "lockfile committed and unchanged"; fi
