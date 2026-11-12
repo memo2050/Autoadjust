@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Billing and subscription</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e;--warn:#f5b84b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}.mut{color:var(--mut)}
+input,button,select{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg);border-color:var(--bd)}button.bad{background:transparent;color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left;font-size:14px}
+.msg{min-height:20px;font-size:14px}.err{color:var(--bad)}.good{color:var(--ok)}a{color:var(--acc)}.hide{display:none}
+.banner{border-radius:10px;padding:10px 12px;margin:10px 0;border:1px solid var(--warn);color:var(--warn)}.banner.bad{border-color:var(--bad);color:var(--bad)}.banner.info{border-color:var(--bd);color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.plan{border:1px solid var(--bd);border-radius:12px;padding:14px}.plan.cur{border-color:var(--acc)}.price{font-size:24px;font-weight:600}
+.bar{height:8px;background:#0d1428;border-radius:6px;overflow:hidden;margin:4px 0}.bar>i{display:block;height:100%;background:var(--acc)}.bar>i.full{background:var(--bad)}.bar>i.near{background:var(--warn)}
+ul{padding-left:18px;margin:8px 0}
+</style></head><body><main>
+<h1>Billing and subscription</h1>
+<p class="mut"><a href="/account.html">← Account and organization</a> <span id="adminlink" class="hide"> · <a href="/billing-admin.html">Platform billing administration</a></span></p>
+<div id="top" class="msg err"></div>
+<div id="app" class="hide">
+  <div id="banners"></div>
+  <div class="card"><h2>Current plan</h2><div id="cur"></div></div>
+  <div class="card"><h2>Usage and remaining capacity</h2><div id="usage"></div><p class="mut" id="usagenote"></p></div>
+  <div class="card"><h2>Plans</h2>
+    <div class="row"><span class="mut">Billing period:</span><select id="interval"><option value="month">Monthly</option><option value="year">Annual</option></select></div>
+    <div class="grid" id="plans"></div><div id="planmsg" class="msg"></div></div>
+  <div class="card"><h2>Manage subscription</h2>
+    <div class="row"><button id="portal" class="sec">Update billing details and payment method</button><button id="cancel" class="bad">Cancel at period end</button><button id="resume" class="sec hide">Keep my subscription (undo cancel)</button></div>
+    <div class="mut">Cancelling never deletes your devices or data. You keep your plan until the paid period ends. Only the organization owner can change billing.</div><div id="mgmsg" class="msg"></div></div>
+  <div class="card"><h2>Invoices</h2><div id="invoices"><span class="mut">Loading…</span></div></div>
+  <div class="card"><h2>Payment history</h2><div id="payments"><span class="mut">Loading…</span></div></div>
+</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},S={ses:null,org:null,st:null};
+function el(t,a,k){var e=document.createElement(t);if(a)for(var x in a){if(x==="text")e.textContent=a[x];else if(x==="onclick")e.onclick=a[x];else e.setAttribute(x,a[x])}(k||[]).forEach(function(c){e.appendChild(c)});return e}
+function say(id,t,c){var m=$(id);m.textContent=t||"";m.className="msg "+(c||"")}
+function money(c,cur){if(c==null)return "Custom";return new Intl.NumberFormat(undefined,{style:"currency",currency:(cur||"usd").toUpperCase()}).format(c/100)}
+function day(s){return s?new Date(s).toLocaleDateString():"—"}
+async function api(method,path,body){var h={authorization:"Bearer "+S.ses.access_token,"content-type":"application/json"};if(S.org)h["x-org-id"]=S.org;var r=await fetch("/api/soc/"+path,{method:method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});var j=await r.json().catch(function(){return{}});if(!r.ok){var e=new Error(j.error||("Request failed ("+r.status+")"));e.status=r.status;e.body=j;throw e}return j}
+function bar(label,u){var pct=u.limit==null?0:Math.min(100,Math.round(u.used*100/Math.max(1,u.limit))),cls=u.limit!=null&&u.used>=u.limit?"full":pct>=80?"near":"";
+  return el("div",{style:"margin:10px 0"},[el("div",{class:"row"},[el("b",{text:label}),el("span",{class:"mut",text:u.limit==null?u.used+" used · no limit applied":u.used+" of "+u.limit+" used · "+u.remaining+" remaining"+(u.overLimit?" · over the limit (existing items are kept)":"")})]),el("div",{class:"bar"},[el("i",{class:cls,style:"width:"+(u.limit==null?0:pct)+"%"})])])}
+function banner(t,c){$("banners").appendChild(el("div",{class:"banner "+(c||""),text:t}))}
+function paint(){
+  var s=S.st,e=s.entitlements,sub=s.subscription;$("banners").textContent="";
+  if(!s.enforced)banner("Plan limits are not enforced on this server yet, so nothing is restricted. The limits below show what will apply once billing is switched on.","info");
+  if(s.trial.state==="active")banner("Free trial: "+s.trial.daysLeft+" day(s) left (ends "+day(s.trial.endsAt)+"). Upgrade any time to keep adding devices.");
+  if(s.restricted)banner("Your free trial has ended. Your existing devices, data and monitoring keep working, but you cannot add new devices, API keys or executors until you upgrade.","bad");
+  if(sub&&sub.paymentFailedAt)banner("Your last payment failed. Update your payment method to avoid losing paid features.","bad");
+  if(sub&&sub.cancelAtPeriodEnd)banner("Your subscription ends on "+day(sub.currentPeriodEnd)+". Your data stays; the plan returns to Free limits.");
+  var d=s.planDef,c=$("cur");c.textContent="";
+  c.appendChild(el("div",{class:"row"},[el("span",{class:"price",text:d?d.name:s.plan}),el("span",{class:"mut",text:sub?sub.status+(sub.interval?" · billed "+(sub.interval==="year"?"annually":"monthly"):"")+(sub.currentPeriodEnd?" · renews/ends "+day(sub.currentPeriodEnd):""):"no paid subscription"})]));
+  c.appendChild(el("div",{class:"mut",text:"Data retention: "+(e.retentionDays==null?"no limit applied":e.retentionDays+" days")}));
+  var u=$("usage");u.textContent="";u.appendChild(bar("Monitored devices",s.usage.devices));u.appendChild(bar("API keys",s.usage.apiKeys));u.appendChild(bar("Executors",s.usage.executors));
+  $("usagenote").textContent=s.usage.note;
+  ["devices","apiKeys","executors"].forEach(function(k){if(s.usage[k].reached&&s.enforced&&!s.restricted)banner("You reached your "+({devices:"monitored devices",apiKeys:"API keys",executors:"executors"})[k]+" limit ("+s.usage[k].limit+"). Upgrade your plan to add more.")});
+  var paid=s.plan!=="free"&&sub&&sub.status!=="canceled",iv=$("interval").value,box=$("plans");box.textContent="";
+  s.plans.forEach(function(p){var cur=p.id===s.plan,price=iv==="year"?p.priceAnnualCents:p.priceMonthlyCents,card=el("div",{class:"plan"+(cur?" cur":"")});
+    card.appendChild(el("b",{text:p.name+(cur?" (current)":"")}));
+    card.appendChild(el("div",{class:"price",text:p.id==="free"?"Free":price==null?"Custom pricing":money(price)+(iv==="year"?" / year":" / month")}));
+    card.appendChild(el("ul",0,[el("li",{text:p.maxDevices+" monitored devices"}),el("li",{text:p.maxApiKeys+" API keys"}),el("li",{text:p.maxExecutors+" executors"}),el("li",{text:p.retentionDays+"-day data retention"})].concat(p.features.map(function(f){return el("li",{text:f})}))));
+    if(p.id==="free"&&p.trialDays)card.appendChild(el("div",{class:"mut",text:p.trialDays+"-day free trial"}));
+    if(p.id!=="free"&&!cur){card.appendChild(price==null?el("div",{class:"mut",text:"Contact the platform administrator for a custom plan."}):el("button",{text:paid?"Switch to this plan":"Choose "+p.name,onclick:function(){choose(p.id,paid)}}))}
+    if(p.id==="free"&&paid)card.appendChild(el("div",{class:"mut",text:"To return to Free, cancel at period end."}));
+    box.appendChild(card)});
+  $("cancel").classList.toggle("hide",!paid||(sub&&sub.cancelAtPeriodEnd));$("resume").classList.toggle("hide",!(paid&&sub&&sub.cancelAtPeriodEnd));$("portal").disabled=!(sub||s.configured);
+}
+async function choose(plan,paid){say("planmsg","Working…");try{var iv=$("interval").value;if(paid){var r=await api("POST","billing/change",{plan:plan,interval:iv});say("planmsg",r.message,"good");setTimeout(load,2500)}else{var c=await api("POST","billing/checkout",{plan:plan,interval:iv});location.href=c.url}}catch(e){say("planmsg",e.message,"err")}}
+function table(box,rows,cols){box.textContent="";if(!rows.length){box.appendChild(el("span",{class:"mut",text:"Nothing yet."}));return}var t=el("table"),h=el("tr");cols.forEach(function(c){h.appendChild(el("th",{text:c[0]}))});t.appendChild(h);rows.forEach(function(r){var tr=el("tr");cols.forEach(function(c){var v=c[1](r);tr.appendChild(el("td",0,[v&&v.nodeType?v:document.createTextNode(v==null?"":String(v))]))});t.appendChild(tr)});box.appendChild(t)}
+async function lists(){try{var i=await api("GET","billing/invoices");table($("invoices"),i.invoices,[["Date",function(r){return day(r.createdAt)}],["Number",function(r){return r.number||r.id}],["Status",function(r){return r.status}],["Amount",function(r){return money(r.amountDue,r.currency)}],["Paid",function(r){return money(r.amountPaid,r.currency)}],["",function(r){return r.hostedUrl&&/^https:\/\//.test(r.hostedUrl)?el("a",{href:r.hostedUrl,target:"_blank",rel:"noopener noreferrer",text:"View"}):""}]])}catch(e){$("invoices").textContent=e.status===403?"Only the organization owner can see invoices.":e.message}
+  try{var p=await api("GET","billing/payments");table($("payments"),p.payments,[["Date",function(r){return day(r.createdAt)}],["Status",function(r){return r.status}],["Amount",function(r){return money(r.amount,r.currency)}],["Refunded",function(r){return r.refunded?money(r.refunded,r.currency):"—"}]])}catch(e){$("payments").textContent=e.status===403?"Only the organization owner can see payments.":e.message}}
+async function load(){S.st=await api("GET","billing/status");paint();lists()}
+$("interval").onchange=function(){if(S.st)paint()};
+$("portal").onclick=async function(){say("mgmsg","Opening…");try{var r=await api("POST","billing/portal");location.href=r.url}catch(e){say("mgmsg",e.message,"err")}};
+$("cancel").onclick=async function(){if(!confirm("Cancel at the end of the paid period? Your data is not deleted."))return;say("mgmsg","Working…");try{var r=await api("POST","billing/cancel");say("mgmsg",r.message,"good");setTimeout(load,2500)}catch(e){say("mgmsg",e.message,"err")}};
+$("resume").onclick=async function(){say("mgmsg","Working…");try{var r=await api("POST","billing/resume");say("mgmsg",r.message,"good");setTimeout(load,2500)}catch(e){say("mgmsg",e.message,"err")}};
+(async function(){
+  try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){}
+  if(!S.ses||!S.ses.access_token){say("top","Please sign in on the account page first.","err");$("top").appendChild(document.createTextNode(" "));$("top").appendChild(el("a",{href:"/account.html",text:"Go to sign in"}));return}
+  try{var m=await api("GET","org/mine"),pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org,o=m.organizations.find(function(x){return x.id===pref})||m.organizations[0];if(!o){say("top","You are not in an organization yet.","err");return}S.org=o.id;$("app").classList.remove("hide");await load();
+    api("GET","billing/admin/plans").then(function(){$("adminlink").classList.remove("hide")}).catch(function(){})}
+  catch(e){say("top",e.status===401?"Your session expired. Sign in again on the account page.":e.message,"err")}
+})();
+})();
+</script></main></body></html>

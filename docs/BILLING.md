@@ -35,3 +35,27 @@ When enforced, limits are **per organization**:
 * **Devices:** only *new* devices beyond the limit are refused (telemetry ingest and Zabbix sync). Existing devices keep updating even if the org is already over the limit; nothing is ever removed. The response lists `deviceLimitSkipped` / `skippedDevices`.
 * **Retention:** `POST /api/soc/noc/retention` is a **dry run** (report only) by default. `{ "apply": true }` deletes old `noc_metrics` samples only, requires enforcement to be on, is audited, and is capped at 5000 rows per call. The audit log, events, incidents and evidence are never touched. Nothing runs automatically.
 * Enabling enforcement: set `BILLING_ENFORCE=1` only after reviewing which organizations exceed the limits (the dry run and `billing/status` show this).
+
+## SaaS subscription system (stages 1-4)
+
+Everything below stays **inert until `BILLING_ENFORCE=1`**; Stripe is **test mode only** (`sk_test_…` keys; a live key is refused unless `BILLING_MODE=live`, which is not enabled anywhere).
+
+**Defaults (editable by the platform administrator, no deploy needed):** Free/Trial 14 days, 25 devices, 25 API keys, 3 executors, 7-day retention; Professional $49/month ($490/year), 100 devices, 100 keys, 10 executors, 30-day retention; Enterprise custom (large defaults, per-organization overrides).
+
+**Database (migration `0110_billing_plans.sql`, additive, rollback provided, scratch DB only):** `billing_plans`, `billing_settings`, `billing_invoices`, `billing_payments`, and new columns on `org_billing` (interval, trial dates, overrides, last payment failure). RLS on, no anon/authenticated access. If the tables are missing the code falls back to the built-in defaults and the Free plan.
+
+**Trial:** starts the first time enforcement sees an organization (existing organizations get a full trial from that moment). After it ends, with no subscription, the organization is *restricted*: existing devices, keys, data and monitoring keep working; only adding new devices/keys/executors is refused (HTTP 402, `code: trial_expired`, `upgradeUrl`). An admin can grant a promotional trial.
+
+**Limit errors:** HTTP 402 with `code` (`plan_limit` / `trial_expired`), `limit`, `max`, `current`, `plan`, `upgradeUrl`. Lowering a limit never deletes anything.
+
+**Grace period:** `past_due` keeps the paid plan until period end + `graceDays` (default 7, admin-configurable 0-90).
+
+**Owner endpoints** (`/api/soc/billing/…`): `status`, `usage`, `invoices` (owner), `payments` (owner), `checkout` (`plan`, `interval: month|year`), `change` (upgrade/downgrade/interval), `cancel`, `resume`, `portal` (billing details/payment method). The plan only changes when Stripe's signed webhook confirms it.
+
+**Webhook events handled:** `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.created/finalized/updated/paid/payment_succeeded/payment_failed/voided`, `charge.refunded`. Each is signature-verified, idempotent by event id, and bound to an organization only via our own metadata or the stored customer id.
+
+**Admin endpoints** (platform administrators only, `PLATFORM_ADMIN_USER_IDS`): `admin/plans` (GET, PUT `:id`), `admin/settings`, `admin/stats`, `admin/coupons`, `admin/orgs`, `admin/orgs/:id/overrides|trial|discount|refund`. Every change is audited. Pages: `/billing.html` (owners), `/billing-admin.html` (administrators).
+
+**Env vars:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_PRO_ANNUAL`, `STRIPE_PRICE_ENTERPRISE`, `STRIPE_PRICE_ENTERPRISE_ANNUAL`, `APP_URL`, `BILLING_ENFORCE`. Webhook events to enable in the Stripe test dashboard: the list above.
+
+**Not covered / honest limits:** plan ids are fixed at free/pro/enterprise (limits, names and prices are editable, new plan ids are not); Stripe portal is used for card and billing-detail updates; verified only against a local fake Stripe, not the real Stripe test environment.

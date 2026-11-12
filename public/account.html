@@ -32,6 +32,8 @@ a{color:var(--acc)}.hide{display:none}
   <div class="card"><h2>Your organizations</h2><div id="orgs"></div>
     <form id="neworg" class="row"><input id="onm" placeholder="New organization name" required minlength="2"><input id="osl" placeholder="address (e.g. acme-corp)" pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"><button type="submit">Create</button></form><div id="orgmsg" class="msg"></div></div>
 
+  <div class="card"><h2>Billing and subscription</h2><div class="row"><span class="mut">Plan, usage, invoices and payment details for the organization in use.</span><button class="sec" onclick="location.href='/billing.html'">Open billing</button></div></div>
+
   <div class="card"><h2>Join with an invitation</h2><form id="acc" class="row"><input id="itok" placeholder="Invitation token" required style="flex:1"><button type="submit">Join</button></form><div id="accmsg" class="msg"></div></div>
 
   <div id="admin" class="hide">
