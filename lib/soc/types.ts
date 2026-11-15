@@ -182,6 +182,8 @@ export interface AgentFinding { claim: string; evidenceIds: string[]; confidence
 export interface AgentRecommendation {
   action: string; priority: "P1" | "P2" | "P3"; disruptive: boolean;
   actionType: ActionType; target: string; rationale: string; evidenceIds: string[];
+  /** false when a disruptive proposal named a target that is not in the evidence: it is shown but never queued for approval. */
+  targetVerified?: boolean;
 }
 export interface AgentOutput { summary: string; analysis: string; report?: string; findings: AgentFinding[]; recommendations: AgentRecommendation[]; limitations: string[] }
 
