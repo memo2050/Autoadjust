@@ -24,7 +24,7 @@ export interface Principal {
   userId?: string; email?: string;
   orgId: string; orgName?: string;
   orgRole?: OrgRole;          // users only
-  keyId?: string; keyHash?: string;   // organization API keys only: which key this request used (executor binding + job signing)
+  keyId?: string; keyHash?: string; scopes?: string[];   // organization API keys only: which key this request used (executor binding + job signing)
   role: ApiRole;              // what the endpoints check
   platformAdmin: boolean;     // may update shared reference data (CISA KEV)
 }
@@ -65,6 +65,19 @@ export async function identifyUser(req: Request, d: AuthDeps): Promise<{ id: str
   return userFromToken(tok, d.fetcher ?? fetch);
 }
 export const apiKeyHash = (key: string) => sha256("aa-key:" + key);
+/** What a collector key may do. A key with no stored scopes (created before scopes existed, or created without choosing) keeps full collector access = all four. */
+export const KEY_SCOPES = ["soc", "noc", "executor", "discovery"] as const;
+export type KeyScope = (typeof KEY_SCOPES)[number];
+/** Client IP as reported by the hosting proxy (first x-forwarded-for hop). Only trustworthy when the app runs behind a proxy that sets it; allowlists are an extra layer, never the only one. */
+export const clientIp = (req: Request) => (req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "").split(",")[0].trim();
+const v4 = (ip: string) => { const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip); if (!m) return null; const n = m.slice(1).map(Number); return n.some((x) => x > 255) ? null : ((n[0] << 24) | (n[1] << 16) | (n[2] << 8) | n[3]) >>> 0; };
+/** Entry is an exact IPv4/IPv6 address or an IPv4 CIDR (a.b.c.d/nn). */
+export function ipMatches(ip: string, entry: string): boolean {
+  if (!ip) return false; if (!entry.includes("/")) return ip.toLowerCase() === entry.toLowerCase();
+  const [base, bits] = entry.split("/"), b = v4(base), x = v4(ip), n = Number(bits); if (b === null || x === null || !Number.isInteger(n) || n < 0 || n > 32) return false;
+  const mask = n === 0 ? 0 : (~0 << (32 - n)) >>> 0; return ((b & mask) >>> 0) === ((x & mask) >>> 0);
+}
+export const validIpEntry = (e: string) => (e.includes("/") ? (() => { const [b, n] = e.split("/"); return v4(b) !== null && /^\d{1,2}$/.test(n) && Number(n) <= 32; })() : v4(e) !== null || /^[0-9a-fA-F:]{2,45}$/.test(e) && e.includes(":"));
 export const API_KEY_RE = /^aa_live_[A-Za-z0-9_-]{32,64}$/;
 
 export interface Memberships { orgId: string; name: string; slug: string; role: OrgRole }
@@ -89,12 +102,13 @@ export async function authenticate(req: Request, d: AuthDeps): Promise<Principal
   // 1. per-organization collector key
   if (tok.startsWith("aa_live_")) {
     if (!API_KEY_RE.test(tok)) return null;
-    const [k] = await d.raw.select<{ id: string; orgId: string; name: string; revokedAt?: string | null; expiresAt?: string | null }>("org_api_keys", { where: { keyHash: apiKeyHash(tok) }, limit: 1 });
+    const [k] = await d.raw.select<{ id: string; orgId: string; name: string; revokedAt?: string | null; expiresAt?: string | null; scopes?: string[] | null; allowedIps?: string[] | null }>("org_api_keys", { where: { keyHash: apiKeyHash(tok) }, limit: 1 });
     if (!k || k.revokedAt || (k.expiresAt && Date.parse(k.expiresAt) <= Date.now())) return null;
+    if (k.allowedIps?.length && !k.allowedIps.some((e) => ipMatches(clientIp(req), e))) return null;     // key only works from its allowlisted addresses
     const [o] = await d.raw.select<{ id: string; name: string; disabledAt?: string | null }>("organizations", { where: { id: k.orgId }, limit: 1 });
     if (!o || o.disabledAt) return null;
     d.raw.upsert("org_api_keys", [{ ...k, lastUsedAt: new Date().toISOString() } as any]).catch(() => {});
-    return { kind: "apikey", name: `key:${k.name}`, orgId: k.orgId, orgName: o.name, role: "collector", platformAdmin: false, keyId: k.id, keyHash: apiKeyHash(tok) };
+    return { kind: "apikey", name: `key:${k.name}`, orgId: k.orgId, orgName: o.name, role: "collector", platformAdmin: false, keyId: k.id, keyHash: apiKeyHash(tok), scopes: k.scopes?.length ? k.scopes : [...KEY_SCOPES] };
   }
 
   // 2. signed-in user (Supabase JWT has three dot-separated parts)

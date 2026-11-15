@@ -23,7 +23,7 @@ import { CATALOG, preview as xPreview } from "../noc/exec/catalog";
 import * as WZ from "./wazuh";
 import * as WC from "./wazuh-config";
 import * as CH from "../noc/changes";
-import { authenticate, allowed, AuthError, identifyUser } from "../tenant/auth";
+import { authenticate, allowed, AuthError, identifyUser, type Principal } from "../tenant/auth";
 import { ScopedStore, TenantError } from "../tenant/scoped-store";
 import * as ORG from "../tenant/orgs";
 import { advanceTask, cancelTask, createTask, publicTask, retryTask, type TaskRun } from "./tasks";
@@ -46,6 +46,11 @@ const wzConfigured = async (store: Store) => !!(await WC.resolveWazuhCfg(store).
 const hits = new Map<string, number[]>();
 function rate(key: string, perMin: number) { const now = Date.now(), a = (hits.get(key) ?? []).filter((t) => now - t < 60000); if (a.length >= perMin) throw new HttpError(429, "Too many requests. Slow down and retry in a minute."); a.push(now); hits.set(key, a); }
 
+const legacySeen = new Map<string, number>();
+function legacyUsed(raw: Store, pr: Principal, actor: Actor) {
+  const now = Date.now(); if (now - (legacySeen.get(pr.name) ?? 0) < 600000) return; legacySeen.set(pr.name, now);
+  audit(new ScopedStore(raw, pr.orgId), actor, "auth.legacy_token_used", pr.name, { note: "A shared SOC_*_TOKEN authenticated. Move this collector to its own key, then set SOC_LEGACY_TOKENS=off." }).catch(() => {});
+}
 export async function handleSoc(req: Request, path: string[], deps: Deps = {}): Promise<Response> {
   try {
     const raw = deps.store ?? getStore();
@@ -62,14 +67,17 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       rate("billing-webhook", 300); const body = await req.text(); if (body.length > 512_000) throw new HttpError(413, "Payload too large.");
       return json(await BILL.handleWebhook(raw, body, req.headers.get("stripe-signature"), (deps as any).env ?? process.env));
     }
-    const pr = await authenticate(req, { raw, fetcher: (deps as any).fetcher });
+    const pr = await authenticate(req, { raw, fetcher: (deps as any).fetcher, env: { ...process.env, ...((deps as any).env ?? {}) } });
     if (!pr) {
       // A signed-in user who has no organization yet may only create one, list theirs, or accept an invitation.
       return json({ error: "Not authorized. Sign in, or provide an organization API key." }, 401);
     }
     const store = new ScopedStore(raw, pr.orgId, { platformAdmin: pr.platformAdmin });
     const actor: Actor = { name: pr.name, role: pr.orgRole ?? pr.role }, role = pr.role;
+    if (pr.kind === "legacy") legacyUsed(raw, pr, actor);        // visible warning in the audit log: a shared token is still in use (switch SOC_LEGACY_TOKENS off only when none appear)
     const area = a === "noc" ? "noc" : a === "org" ? "org" : "soc";
+    // Collector keys are limited to the scopes they were issued with (soc | noc | executor | discovery). Signed-in users and legacy tokens are not scope-limited.
+    const scope = (sc: string) => { if (pr.kind === "apikey" && !(pr.scopes ?? []).includes(sc)) throw new HttpError(403, `This collector key is not allowed to use the "${sc}" scope.`); };
     const need = (p: string) => { if (!allowed(pr, p, area)) throw new HttpError(403, `Your role (${pr.orgRole ?? role}) cannot do this.`); };
 
     if (a === "billing") {
@@ -111,6 +119,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       if (b === "invitations" && c && m === "DELETE") return json(await ORG.revokeInvite(raw, pr, c));
       if (b === "keys" && !c && m === "GET") return json(await ORG.listKeys(raw, pr));
       if (b === "keys" && !c && m === "POST") { rate(pr.name + ":keys", 10); return json(await ORG.createKey(raw, pr, await readJson(req)), 201); }
+      if (b === "keys" && c && path[3] === "rotate" && m === "POST") { rate(pr.name + ":keys", 10); return json(await ORG.rotateKey(raw, pr, c, await readJson(req)), 201); }
       if (b === "keys" && c && m === "DELETE") return json(await ORG.revokeKey(raw, pr, c));
       if (b === "audit" && m === "GET") { need("audit"); return json(await store.select(T.audit, { order: ["seq", "desc"], limit: lim(u, 100, 500) })); }
       needUser();
@@ -119,25 +128,25 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
 
     if (a === "me" && m === "GET") return json({ actor: actor.name, role, orgRole: pr.orgRole ?? null, organization: { id: pr.orgId, name: pr.orgName ?? null }, auth: pr.kind, dev: pr.kind === "dev", store: store.kind, aiConfigured: !!(deps.model !== undefined ? deps.model : defaultModel()) });
 
-    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
+    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
     const xc: XJ.ExecCtx = { store, actor, orgId: pr.orgId, pr };
-    if (a === "noc" && b === "executor" && c === "jobs" && !path[3] && m === "GET") { need("ingest"); rate(actor.name + ":xpoll", 120); return json(await XJ.pollJobs(xc, String(u.searchParams.get("host") ?? ""))); }
-    if (a === "noc" && b === "executor" && c === "jobs" && path[3] && path[4] === "result" && m === "POST") { need("ingest"); rate(actor.name + ":xres", 120); return json(await XJ.acceptResult(xc, path[3], await readJson(req))); }
+    if (a === "noc" && b === "executor" && c === "jobs" && !path[3] && m === "GET") { need("ingest"); scope("executor"); rate(actor.name + ":xpoll", 120); return json(await XJ.pollJobs(xc, String(u.searchParams.get("host") ?? ""))); }
+    if (a === "noc" && b === "executor" && c === "jobs" && path[3] && path[4] === "result" && m === "POST") { need("ingest"); scope("executor"); rate(actor.name + ":xres", 120); return json(await XJ.acceptResult(xc, path[3], await readJson(req))); }
     if (a === "noc" && ["alerts", "push", "executions", "scans", "changes"].includes(b ?? "") && !(["executions", "scans", "changes"].includes(b ?? "") && m === "GET" && c !== "pending") && !(["scans", "changes"].includes(b ?? "") && m === "POST" && !path[3] ) && !(b === "changes" && c && ["approve", "reject", "rollback"].includes(path[3] ?? ""))) {
       const nc: N.Ctx = { store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
-      if (b === "scans" && c === "pending" && m === "GET") { need("ingest"); return json(await TP.claimScan(nc, String(u.searchParams.get("agent") ?? actor.name))); }
-      if (b === "scans" && c && path[3] === "progress" && m === "POST") { need("ingest"); rate(actor.name + ":scanp", 240); return json(await TP.reportScan(nc, c, await readJson(req))); }
-      if (b === "scans" && c && path[3] === "complete" && m === "POST") { need("ingest"); return json(await TP.finishScan(nc, c, await readJson(req))); }
-      if (b === "changes" && c === "pending" && m === "GET") { need("ingest"); return json(await CH.claimChanges(nc)); }
-      if (b === "changes" && c && path[3] === "backup" && m === "POST") { need("ingest"); return json(await CH.executorBackup(nc, c, await readJson(req))); }
-      if (b === "changes" && c && path[3] === "result" && m === "POST") { need("ingest"); return json(await CH.executorResult(nc, c, await readJson(req))); }
-      if (b === "alerts" && m === "POST") { need("ingest"); rate(actor.name + ":alerts", 120); const al = N.normalizeAlerts(await readJson(req)); return json({ results: await N.receiveAlerts(nc, al, u.searchParams.get("source") ?? undefined) }); }
-      if (b === "push" && m === "POST") { need("ingest"); rate(actor.name + ":push", 60); return json(await pushSnapshot(nc, await readJson(req))); }
-      if (b === "executions" && c === "pending" && m === "GET") { need("ingest"); return json({ executions: await N.pendingExecutions(nc) }); }
-      if (b === "executions" && c && path[3] === "result" && m === "POST") { need("ingest"); return json(await N.reportExecution(nc, c, await readJson(req))); }
+      if (b === "scans" && c === "pending" && m === "GET") { need("ingest"); scope("discovery"); return json(await TP.claimScan(nc, String(u.searchParams.get("agent") ?? actor.name))); }
+      if (b === "scans" && c && path[3] === "progress" && m === "POST") { need("ingest"); scope("discovery"); rate(actor.name + ":scanp", 240); return json(await TP.reportScan(nc, c, await readJson(req))); }
+      if (b === "scans" && c && path[3] === "complete" && m === "POST") { need("ingest"); scope("discovery"); return json(await TP.finishScan(nc, c, await readJson(req))); }
+      if (b === "changes" && c === "pending" && m === "GET") { need("ingest"); scope("executor"); return json(await CH.claimChanges(nc)); }
+      if (b === "changes" && c && path[3] === "backup" && m === "POST") { need("ingest"); scope("executor"); return json(await CH.executorBackup(nc, c, await readJson(req))); }
+      if (b === "changes" && c && path[3] === "result" && m === "POST") { need("ingest"); scope("executor"); return json(await CH.executorResult(nc, c, await readJson(req))); }
+      if (b === "alerts" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":alerts", 120); const al = N.normalizeAlerts(await readJson(req)); return json({ results: await N.receiveAlerts(nc, al, u.searchParams.get("source") ?? undefined) }); }
+      if (b === "push" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":push", 60); return json(await pushSnapshot(nc, await readJson(req))); }
+      if (b === "executions" && c === "pending" && m === "GET") { need("ingest"); scope("executor"); return json({ executions: await N.pendingExecutions(nc) }); }
+      if (b === "executions" && c && path[3] === "result" && m === "POST") { need("ingest"); scope("executor"); return json(await N.reportExecution(nc, c, await readJson(req))); }
     }
     if (a === "ingest" && b === "windows" && m === "POST") {
-      need("ingest");
+      need("ingest"); scope("soc");
       const body = await readJson(req);
       const events = Array.isArray(body) ? body : body.events;
       if (!Array.isArray(events)) throw new HttpError(400, "Body must be an array of events or { host, events: [...] }");
@@ -147,10 +156,10 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     }
 
     // Wazuh bridge endpoints (ingest role only, before the read gate)
-    if (a === "ingest" && b === "wazuh" && m === "POST") { need("ingest"); rate(actor.name + ":wazuh", 60); const body = await readJson(req); try { return json(await WZ.ingestWazuh(store, body, { source: "live", mode: "bridge", actor })); } catch (e: any) { await WZ.recordWazuhError(store, e.message, "bridge", actor).catch(() => {}); throw e; } }
-    if (a === "wazuh" && b === "cursor" && m === "GET") { need("ingest"); const st = await WZ.wazuhStatus(store); return json({ cursor: st.cursor }); }
-    if (a === "wazuh" && b === "bridge-error" && m === "POST") { need("ingest"); await WZ.recordWazuhError(store, String((await readJson(req)).error ?? "unknown"), "bridge", actor); return json({ ok: true }); }
-    if (a === "wazuh" && b === "bridge-test" && m === "POST") { need("ingest"); const t = (await readJson(req)) as WZ.WazuhTest; const st = (await store.get<any>(T.meta, "wazuh")) ?? { id: "wazuh", data: { alertsReceived: 0 } }; st.data.lastTest = { at: new Date().toISOString(), by: actor.name, mode: "bridge", ok: !!t.ok, steps: (t.steps ?? []).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 80), ok: !!x.ok, detail: String(x.detail).slice(0, 300) })) }; await store.upsert(T.meta, [st]); await audit(store, actor, "wazuh.test.bridge", "wazuh", { ok: !!t.ok }); return json({ ok: true }); }
+    if (a === "ingest" && b === "wazuh" && m === "POST") { need("ingest"); scope("soc"); rate(actor.name + ":wazuh", 60); const body = await readJson(req); try { return json(await WZ.ingestWazuh(store, body, { source: "live", mode: "bridge", actor })); } catch (e: any) { await WZ.recordWazuhError(store, e.message, "bridge", actor).catch(() => {}); throw e; } }
+    if (a === "wazuh" && b === "cursor" && m === "GET") { need("ingest"); scope("soc"); const st = await WZ.wazuhStatus(store); return json({ cursor: st.cursor }); }
+    if (a === "wazuh" && b === "bridge-error" && m === "POST") { need("ingest"); scope("soc"); await WZ.recordWazuhError(store, String((await readJson(req)).error ?? "unknown"), "bridge", actor); return json({ ok: true }); }
+    if (a === "wazuh" && b === "bridge-test" && m === "POST") { need("ingest"); scope("soc"); const t = (await readJson(req)) as WZ.WazuhTest; const st = (await store.get<any>(T.meta, "wazuh")) ?? { id: "wazuh", data: { alertsReceived: 0 } }; st.data.lastTest = { at: new Date().toISOString(), by: actor.name, mode: "bridge", ok: !!t.ok, steps: (t.steps ?? []).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 80), ok: !!x.ok, detail: String(x.detail).slice(0, 300) })) }; await store.upsert(T.meta, [st]); await audit(store, actor, "wazuh.test.bridge", "wazuh", { ok: !!t.ok }); return json({ ok: true }); }
     need("read");
     if (a === "overview" && m === "GET") return json(await overview(store));
     if (a === "ai" && b === "analyze" && m === "POST") {
@@ -216,7 +225,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     if (a === "noc" && b === "devices" && m === "GET") { need("read"); return json(await listDevices(store)); }
     // ---- Wazuh (read-only integration) ----
     if (a === "wazuh" && b === "status" && m === "GET") { need("read"); return json(await WZ.wazuhStatus(store, Date.now(), await wzConfigured(store))); }
-    if (a === "wazuh" && b === "sync" && m === "POST") { need("ingest"); rate(actor.name + ":wzsync", 20); return json(await WZ.syncWazuh(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver))); }
+    if (a === "wazuh" && b === "sync" && m === "POST") { need("ingest"); scope("soc"); rate(actor.name + ":wzsync", 20); return json(await WZ.syncWazuh(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver))); }
     if (a === "wazuh" && b === "test" && c === "connection" && m === "POST") { need("approve"); rate(actor.name + ":wztest", 10); return json(await WZ.testWazuhConnection(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver).catch((e) => { throw e; }))); }
     if (a === "wazuh" && b === "config" && m === "GET") { need("approve"); return json(await WC.getWazuhConfigPublic(store)); }
     if (a === "wazuh" && b === "config" && m === "PUT") { need("approve"); rate(actor.name + ":wzcfg", 20); return json(await WC.saveWazuhConfig(store, actor, await readJson(req), process.env, (deps as any).resolver)); }

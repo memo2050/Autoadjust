@@ -5,7 +5,7 @@ import type { Store } from "../soc/store";
 import { audit, HttpError } from "../soc/pipeline";
 import { nowIso, sha256 } from "../soc/util";
 import { ScopedStore, UUID_RE } from "./scoped-store";
-import { API_KEY_RE, apiKeyHash, membershipsOf, ORG_ROLES, type OrgRole, type Principal } from "./auth";
+import { API_KEY_RE, apiKeyHash, KEY_SCOPES, membershipsOf, validIpEntry, ORG_ROLES, type OrgRole, type Principal } from "./auth";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
 const MAX_ORGS_PER_USER = 5, INVITE_DAYS = 7;
@@ -107,16 +107,40 @@ export async function createKey(raw: Store, p: Principal, body: any) {
   needAdmin(p);
   const name = str(body?.name, 2, 60, "Key name");
   { const { requireRoom } = await import("../billing/service"); await requireRoom(raw, p.orgId, "keys", (await raw.select<{ revokedAt?: string | null }>("org_api_keys", { where: { orgId: p.orgId }, limit: 1000 })).filter((k) => !k.revokedAt).length); }
+  const opts = keyOptions(body);
+  return issueKey(raw, p, name, opts, "org.key.create");
+}
+function keyOptions(body: any) {
+  const scopes: string[] = body?.scopes === undefined ? [...KEY_SCOPES] : Array.isArray(body.scopes) ? [...new Set<string>(body.scopes.map(String))] : (() => { throw new HttpError(400, "scopes must be a list"); })();
+  if (!scopes.length || scopes.some((x) => !(KEY_SCOPES as readonly string[]).includes(x))) throw new HttpError(400, `scopes must be from: ${KEY_SCOPES.join(", ")}`);
+  const ips: string[] = body?.allowedIps === undefined ? [] : Array.isArray(body.allowedIps) ? body.allowedIps.map((x: any) => String(x).trim()) : (() => { throw new HttpError(400, "allowedIps must be a list"); })();
+  if (ips.length > 20 || ips.some((x) => !validIpEntry(x))) throw new HttpError(400, "allowedIps: up to 20 IPv4/IPv6 addresses or IPv4 CIDR ranges");
+  let expiresAt: string | null = null; if (body?.expiresInDays !== undefined) { const d = Number(body.expiresInDays); if (!Number.isInteger(d) || d < 1 || d > 730) throw new HttpError(400, "expiresInDays must be 1 to 730"); expiresAt = new Date(Date.now() + d * 86400000).toISOString(); }
+  return { scopes, ips, expiresAt };
+}
+async function issueKey(raw: Store, p: Principal, name: string, o: { scopes: string[]; ips: string[]; expiresAt: string | null }, action: string, extra: Record<string, unknown> = {}) {
   const key = "aa_live_" + randomBytes(32).toString("base64url"); if (!API_KEY_RE.test(key)) throw new HttpError(500, "Key generation failed");
   const id = uuid();
-  await raw.upsert("org_api_keys", [{ id, orgId: p.orgId, name, keyPrefix: key.slice(0, 12), keyHash: apiKeyHash(key), createdBy: p.userId ?? null }]);
-  await audit(new ScopedStore(raw, p.orgId), { name: p.name, role: p.orgRole ?? p.role }, "org.key.create", id, { name });
-  return { id, name, key, note: "Copy this key now. It is shown once; only a hash is stored. It can send collector data for this organization only." };
+  await raw.upsert("org_api_keys", [{ id, orgId: p.orgId, name, keyPrefix: key.slice(0, 12), keyHash: apiKeyHash(key), createdBy: p.userId ?? null, scopes: o.scopes, allowedIps: o.ips, expiresAt: o.expiresAt }]);
+  await audit(new ScopedStore(raw, p.orgId), { name: p.name, role: p.orgRole ?? p.role }, action, id, { name, scopes: o.scopes, ipRestricted: o.ips.length > 0, expiresAt: o.expiresAt, ...extra });
+  return { id, name, key, scopes: o.scopes, expiresAt: o.expiresAt, note: "Copy this key now. It is shown once; only a hash is stored. It can send collector data for this organization only." };
 }
 export async function listKeys(raw: Store, p: Principal) {
   needAdmin(p);
   const rows = await raw.select<any>("org_api_keys", { where: { orgId: p.orgId } });
-  return { keys: rows.map((k) => ({ id: k.id, name: k.name, prefix: k.keyPrefix, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null, revokedAt: k.revokedAt ?? null })) };
+  return { keys: rows.map((k) => ({ id: k.id, name: k.name, prefix: k.keyPrefix, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt ?? null, revokedAt: k.revokedAt ?? null, expiresAt: k.expiresAt ?? null, scopes: k.scopes?.length ? k.scopes : [...KEY_SCOPES], allowedIps: k.allowedIps ?? [] })) };
+}
+/** Replace a key without a gap: a new key (same name, scopes, allowlist) is issued and the old one keeps working only for `overlapHours` (default 24, max 168), then expires. */
+export async function rotateKey(raw: Store, p: Principal, id: string, body: any) {
+  needAdmin(p);
+  const [k] = await raw.select<any>("org_api_keys", { where: { id, orgId: p.orgId }, limit: 1 });
+  if (!k || k.revokedAt) throw new HttpError(404, "Key not found");
+  const h = body?.overlapHours === undefined ? 24 : Number(body.overlapHours); if (!Number.isFinite(h) || h < 0 || h > 168) throw new HttpError(400, "overlapHours must be 0 to 168");
+  const until = new Date(Date.now() + h * 3600000).toISOString();
+  { const { requireRoom } = await import("../billing/service"); await requireRoom(raw, p.orgId, "keys", (await raw.select<{ revokedAt?: string | null }>("org_api_keys", { where: { orgId: p.orgId }, limit: 1000 })).filter((x) => !x.revokedAt).length - 1); }   // rotation replaces a key: does not count as an extra one
+  const fresh = await issueKey(raw, p, k.name, { scopes: k.scopes?.length ? k.scopes : [...KEY_SCOPES], ips: k.allowedIps ?? [], expiresAt: null }, "org.key.rotate", { replaces: id, oldValidUntil: until });
+  await raw.upsert("org_api_keys", [{ ...k, expiresAt: h === 0 ? nowIso() : (k.expiresAt && Date.parse(k.expiresAt) < Date.parse(until) ? k.expiresAt : until) }]);
+  return { ...fresh, oldKeyId: id, oldKeyValidUntil: until };
 }
 export async function revokeKey(raw: Store, p: Principal, id: string) {
   needAdmin(p);
