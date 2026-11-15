@@ -1,3 +1,4 @@
+import * as LC from "../tenant/lifecycle";
 import { enforceMfa, mfaStatus, setOrgMfaPolicy, PRIVILEGED } from "../tenant/mfa";
 import { limit as limitRate } from "./ratelimit";
 import * as BILL from "../billing/service";
@@ -68,6 +69,10 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       await rate("billing-webhook", 300); const body = await req.text(); if (body.length > 512_000) throw new HttpError(413, "Payload too large.");
       return json(await BILL.handleWebhook(raw, body, req.headers.get("stripe-signature"), (deps as any).env ?? process.env));
     }
+    if (a === "org" && b === "export" && c === "download" && m === "GET") {         // public path: authorised ONLY by the signed, expiring, single-use link (and the owner role is re-checked)
+      await rate("export-download", 20); const out = await LC.downloadExport(raw, { ...process.env, ...((deps as any).env ?? {}) }, u.searchParams.get("t") ?? "");
+      return new Response(new Uint8Array(out.zip), { status: 200, headers: { "content-type": "application/zip", "content-disposition": `attachment; filename="autoadjust-export-${new Date().toISOString().slice(0, 10)}.zip"`, "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+    }
     const pr = await authenticate(req, { raw, fetcher: (deps as any).fetcher, env: { ...process.env, ...((deps as any).env ?? {}) } });
     if (!pr) {
       // A signed-in user who has no organization yet may only create one, list theirs, or accept an invitation.
@@ -110,9 +115,20 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       }
       return json({ error: "Not found" }, 404);
     }
+    if (a === "admin" && b === "deletions") {                                             // platform administrators only (signed-in users; shared tokens are not accepted here)
+      if (pr.kind !== "user" || !pr.platformAdmin) throw new HttpError(403, "Platform administrators only.");
+      await rate((pr.userId ?? pr.name) + ":deladmin", 30);
+      if (!c && m === "GET") return json({ requests: await LC.listDeletions(raw) });
+      if (c && path[3] === "approve" && m === "POST") return json(await LC.approveDeletion(raw, pr, c));
+      return json({ error: "Not found" }, 404);
+    }
     if (a === "org") {
       const user = pr.userId ? { id: pr.userId, email: pr.email } : null;
       const needUser = () => { if (!user) throw new HttpError(403, "Organization management needs a signed-in user account."); return user; };
+      if (b === "export" && !c && m === "POST") { await rate(pr.name + ":export", 3); return json(await LC.requestExport(raw, pr, envAll)); }
+      if (b === "deletion" && !c && m === "GET") { need("read"); return json(await LC.deletionStatus(raw, pr.orgId)); }
+      if (b === "deletion" && !c && m === "POST") { await rate(pr.name + ":delreq", 10); return json(await LC.requestDeletion(raw, pr, await readJson(req)), 201); }
+      if (b === "deletion" && !c && m === "DELETE") return json(await LC.cancelDeletion(raw, pr));
       if (b === "mfa" && m === "GET") return json(await mfaStatus(raw, pr, envAll));
       if (b === "mfa" && m === "POST") {
         need("approve"); if (pr.kind !== "user" || !PRIVILEGED.includes(pr.orgRole ?? "")) throw new HttpError(403, "Only an owner or IT admin can change the organization's MFA policy.");
