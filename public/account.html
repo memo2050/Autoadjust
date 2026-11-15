@@ -34,6 +34,10 @@ a{color:var(--acc)}.hide{display:none}
 
   <div class="card"><h2>Billing and subscription</h2><div class="row"><span class="mut">Plan, usage, invoices and payment details for the organization in use.</span><button class="sec" onclick="location.href='/billing.html'">Open billing</button></div></div>
 
+  <div class="card" id="mfacard"><h2>Two-step verification</h2><div id="mfabody" class="mut">Checking…</div><div id="mfamsg" class="msg"></div></div>
+
+  <div class="card" id="datacard"><h2>Your organization's data</h2><div id="databody" class="mut">Checking…</div><div id="datamsg" class="msg"></div></div>
+
   <div class="card"><h2>Join with an invitation</h2><form id="acc" class="row"><input id="itok" placeholder="Invitation token" required style="flex:1"><button type="submit">Join</button></form><div id="accmsg" class="msg"></div></div>
 
   <div id="admin" class="hide">
@@ -59,7 +63,7 @@ async function enter(){
   var m=await api("GET","org/mine");S.orgs=m.organizations;
   var pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org;
   S.cur=(S.orgs.find(function(o){return o.id===S.cur})||S.orgs.find(function(o){return o.id===pref})||S.orgs[0]||{}).id||null;
-  paintOrgs();await paintAdmin();
+  paintOrgs();await paintAdmin();await paintMfa();await paintData();
 }
 function paintOrgs(){
   var box=$("orgs");box.textContent="";if(!S.orgs.length){box.appendChild(el("p",{class:"mut",text:"You are not in an organization yet. Create one below or join with an invitation."}));$("orgline").textContent="";return}
@@ -85,6 +89,34 @@ $("neworg").onsubmit=async function(ev){ev.preventDefault();say("orgmsg","Creati
 $("acc").onsubmit=async function(ev){ev.preventDefault();say("accmsg","Joining…");try{var r=await api("POST","org/invitations/accept",{token:$("itok").value.trim()});say("accmsg","Joined "+r.organization.name+".","good");$("acc").reset();await useOrg(r.organization.id)}catch(e){say("accmsg",e.message,"err")}};
 $("invf").onsubmit=async function(ev){ev.preventDefault();say("invmsg","Creating…");try{var r=await api("POST","org/invitations",{email:$("iem").value.trim(),role:$("irole").value});$("invmsg").textContent="";$("invmsg").className="msg good";$("invmsg").appendChild(document.createTextNode("Send this token to "+r.email+" over a secure channel (shown once): "));$("invmsg").appendChild(el("code",{text:r.token}));$("invf").reset();paintAdmin()}catch(e){say("invmsg",e.message,"err")}};
 $("keyf").onsubmit=async function(ev){ev.preventDefault();say("keymsg","Creating…");try{var r=await api("POST","org/keys",{name:$("knm").value.trim()});$("keymsg").textContent="";$("keymsg").className="msg good";$("keymsg").appendChild(document.createTextNode("Copy this key now (shown once): "));$("keymsg").appendChild(el("code",{text:r.key}));$("keyf").reset();paintAdmin()}catch(e){say("keymsg",e.message,"err")}};
+
+async function paintMfa(){
+  var b=$("mfabody");b.textContent="";var st;try{st=await api("GET","org/mfa")}catch(e){b.textContent="Unavailable.";return}
+  var fs=((S.ses.user&&S.ses.user.factors)||[]).filter(function(f){return f.factor_type==="totp"&&f.status==="verified"});
+  var line=el("div",{"class":"mut",text:(fs.length?(st.verified?"Authenticator app is on and verified for this session.":"Authenticator app is on. Enter a code to verify this session."):"Authenticator app is not set up.")+(st.enforced&&st.required?" Your role needs it to make changes.":"")});b.appendChild(line);
+  var code=el("input",{id:"mfacode",placeholder:"6-digit code",inputmode:"numeric",maxlength:"6",autocomplete:"one-time-code"});
+  if(fs.length&&!st.verified){var f=el("form",{"class":"row"},[code,el("button",{type:"submit",text:"Verify"})]);f.onsubmit=function(ev){ev.preventDefault();mfaVerify(fs[0].id)};b.appendChild(f)}
+  if(!fs.length)b.appendChild(el("div",{"class":"row"},[el("button",{"class":"sec",text:"Set up authenticator app",onclick:mfaEnroll})]));
+  {var rq=el("label",{"class":"row mut"},[el("input",{type:"checkbox",id:"mfareq"}),el("span",{text:"Require two-step verification for every member of this organization"})]);rq.firstChild.checked=!!st.orgRequiresMfa;rq.firstChild.disabled=!(st.privileged);rq.firstChild.onchange=async function(){try{await api("POST","org/mfa",{requireMfa:this.checked});say("mfamsg","Saved.","good")}catch(e){this.checked=!this.checked;say("mfamsg",e.message,"err")}};b.appendChild(rq)}
+}
+async function mfaEnroll(){say("mfamsg","");try{var r=await gt("factors",{factor_type:"totp",friendly_name:"Authenticator "+Date.now()},S.ses.access_token);var b=$("mfabody");b.textContent="";
+  b.appendChild(el("div",{"class":"mut",text:"Scan this code with your authenticator app (or type the key), then enter the 6-digit code."}));
+  var q=el("img",{alt:"Authenticator QR code",width:"160",height:"160"});q.src=r.totp.qr_code;b.appendChild(q);b.appendChild(el("div",{"class":"mut",text:"Key: "+r.totp.secret}));
+  var code=el("input",{id:"mfacode",placeholder:"6-digit code",inputmode:"numeric",maxlength:"6"});var f=el("form",{"class":"row"},[code,el("button",{type:"submit",text:"Turn on"})]);f.onsubmit=function(ev){ev.preventDefault();mfaVerify(r.id)};b.appendChild(f)}catch(e){say("mfamsg",e.message,"err")}}
+async function mfaVerify(id){try{var c=await gt("factors/"+id+"/challenge",{},S.ses.access_token);var t=await gt("factors/"+id+"/verify",{challenge_id:c.id,code:$("mfacode").value.trim()},S.ses.access_token);S.ses=Object.assign({},S.ses,t);save();say("mfamsg","Verified.","good");await enter()}catch(e){say("mfamsg",e.message,"err")}}
+
+async function paintData(){
+  var b=$("databody");b.textContent="";var o=(S.orgs||[]).find(function(x){return x.id===S.cur})||{};var owner=o.role==="owner";
+  b.appendChild(el("div",{"class":"mut",text:"Download everything this organization has stored (events, alerts, incidents, devices, audit log and settings) as a ZIP. Passwords, keys and tokens are never included."+(owner?"":" Only an owner can export or delete the organization.")}));
+  var st;try{st=await api("GET","org/deletion")}catch(e){st={request:null}}
+  if(owner){
+    b.appendChild(el("div",{"class":"row"},[el("button",{"class":"sec",text:"Export my data",onclick:async function(){say("datamsg","Preparing…");try{var r=await api("POST","org/export");say("datamsg","Download starting. The link works once and expires in 10 minutes.","good");location.href=r.downloadUrl}catch(e){say("datamsg",e.message,"err")}}})]));
+    if(st.request){b.appendChild(el("div",{"class":"mut",text:"Deletion requested. Nothing is deleted before "+new Date(st.request.holdUntil).toLocaleDateString()+", and a platform administrator must then approve it. You can cancel until then."}));
+      b.appendChild(el("div",{"class":"row"},[el("button",{"class":"sec",text:"Cancel deletion request",onclick:async function(){try{await api("DELETE","org/deletion");say("datamsg","Cancelled.","good");await paintData()}catch(e){say("datamsg",e.message,"err")}}})]))}
+    else{var nm=el("input",{id:"delname",placeholder:"Type the organization name to confirm",style:"flex:1"});var f=el("form",{"class":"row"},[nm,el("button",{type:"submit","class":"sec",text:"Request deletion"})]);
+      f.onsubmit=async function(ev){ev.preventDefault();try{var r=await api("POST","org/deletion",{confirm:nm.value});say("datamsg",r.message,"good");await paintData()}catch(e){say("datamsg",e.message,"err")}};b.appendChild(f)}
+  }
+}
 function go(h){return async function(){if(S.ses){await refresh();save()}location.href="/"+h}}
 $("opensoc").onclick=go("#/soc");$("opennoc").onclick=go("#/noc");
 fetch("/api/auth/config").then(function(r){return r.json()}).then(async function(c){S.cfg=c;if(!c.configured){say("cfgmsg","Sign-in is not configured on this server yet (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are missing).","err");return}load();if(S.ses)await refresh();try{await enter()}catch(e){say("cfgmsg",e.message,"err")}}).catch(function(){say("cfgmsg","Could not load sign-in settings.","err")});

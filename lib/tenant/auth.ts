@@ -24,7 +24,8 @@ export interface Principal {
   userId?: string; email?: string;
   orgId: string; orgName?: string;
   orgRole?: OrgRole;          // users only
-  keyId?: string; keyHash?: string;   // organization API keys only: which key this request used (executor binding + job signing)
+  aal?: string;               // users only: authenticator assurance level from the sign-in token ("aal2" = second factor verified)
+  keyId?: string; keyHash?: string; scopes?: string[];   // organization API keys only: which key this request used (executor binding + job signing)
   role: ApiRole;              // what the endpoints check
   platformAdmin: boolean;     // may update shared reference data (CISA KEV)
 }
@@ -47,15 +48,17 @@ export function verifyJwtHs256(token: string, secret: string, now = Date.now()):
   } catch { return null; }
 }
 
-async function userFromToken(token: string, f: typeof fetch): Promise<{ id: string; email?: string; activeOrg?: string } | null> {
+async function userFromToken(token: string, f: typeof fetch): Promise<{ id: string; email?: string; activeOrg?: string; aal?: string } | null> {
   const secret = process.env.SUPABASE_JWT_SECRET;
-  if (secret) { const c = verifyJwtHs256(token, secret); return c ? { id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org } : null; }
+  if (secret) { const c = verifyJwtHs256(token, secret); return c ? { id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org, aal: typeof c.aal === "string" ? c.aal : undefined } : null; }
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const r = await f(`${url.replace(/\/$/, "")}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
   if (!r || !r.ok) return null;
   const u: any = await r.json().catch(() => null);
-  return u && typeof u.id === "string" && UUID_RE.test(u.id) ? { id: u.id, email: u.email, activeOrg: u.user_metadata?.active_org } : null;
+  // The auth server has just validated this token, so its (unverified-by-us) payload can be read for the assurance level.
+  let aal: string | undefined; try { const c = JSON.parse(b64u(token.split(".")[1]).toString()); if (typeof c.aal === "string") aal = c.aal; } catch { /* no aal claim: treated as aal1 */ }
+  return u && typeof u.id === "string" && UUID_RE.test(u.id) ? { id: u.id, email: u.email, activeOrg: u.user_metadata?.active_org, aal } : null;
 }
 
 /** Signed-in user without choosing an organization (used to create/list organizations and accept invitations). */
@@ -65,6 +68,19 @@ export async function identifyUser(req: Request, d: AuthDeps): Promise<{ id: str
   return userFromToken(tok, d.fetcher ?? fetch);
 }
 export const apiKeyHash = (key: string) => sha256("aa-key:" + key);
+/** What a collector key may do. A key with no stored scopes (created before scopes existed, or created without choosing) keeps full collector access = all four. */
+export const KEY_SCOPES = ["soc", "noc", "executor", "discovery"] as const;
+export type KeyScope = (typeof KEY_SCOPES)[number];
+/** Client IP as reported by the hosting proxy (first x-forwarded-for hop). Only trustworthy when the app runs behind a proxy that sets it; allowlists are an extra layer, never the only one. */
+export const clientIp = (req: Request) => (req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "").split(",")[0].trim();
+const v4 = (ip: string) => { const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip); if (!m) return null; const n = m.slice(1).map(Number); return n.some((x) => x > 255) ? null : ((n[0] << 24) | (n[1] << 16) | (n[2] << 8) | n[3]) >>> 0; };
+/** Entry is an exact IPv4/IPv6 address or an IPv4 CIDR (a.b.c.d/nn). */
+export function ipMatches(ip: string, entry: string): boolean {
+  if (!ip) return false; if (!entry.includes("/")) return ip.toLowerCase() === entry.toLowerCase();
+  const [base, bits] = entry.split("/"), b = v4(base), x = v4(ip), n = Number(bits); if (b === null || x === null || !Number.isInteger(n) || n < 0 || n > 32) return false;
+  const mask = n === 0 ? 0 : (~0 << (32 - n)) >>> 0; return ((b & mask) >>> 0) === ((x & mask) >>> 0);
+}
+export const validIpEntry = (e: string) => (e.includes("/") ? (() => { const [b, n] = e.split("/"); return v4(b) !== null && /^\d{1,2}$/.test(n) && Number(n) <= 32; })() : v4(e) !== null || /^[0-9a-fA-F:]{2,45}$/.test(e) && e.includes(":"));
 export const API_KEY_RE = /^aa_live_[A-Za-z0-9_-]{32,64}$/;
 
 export interface Memberships { orgId: string; name: string; slug: string; role: OrgRole }
@@ -89,12 +105,13 @@ export async function authenticate(req: Request, d: AuthDeps): Promise<Principal
   // 1. per-organization collector key
   if (tok.startsWith("aa_live_")) {
     if (!API_KEY_RE.test(tok)) return null;
-    const [k] = await d.raw.select<{ id: string; orgId: string; name: string; revokedAt?: string | null; expiresAt?: string | null }>("org_api_keys", { where: { keyHash: apiKeyHash(tok) }, limit: 1 });
+    const [k] = await d.raw.select<{ id: string; orgId: string; name: string; revokedAt?: string | null; expiresAt?: string | null; scopes?: string[] | null; allowedIps?: string[] | null }>("org_api_keys", { where: { keyHash: apiKeyHash(tok) }, limit: 1 });
     if (!k || k.revokedAt || (k.expiresAt && Date.parse(k.expiresAt) <= Date.now())) return null;
+    if (k.allowedIps?.length && !k.allowedIps.some((e) => ipMatches(clientIp(req), e))) return null;     // key only works from its allowlisted addresses
     const [o] = await d.raw.select<{ id: string; name: string; disabledAt?: string | null }>("organizations", { where: { id: k.orgId }, limit: 1 });
     if (!o || o.disabledAt) return null;
     d.raw.upsert("org_api_keys", [{ ...k, lastUsedAt: new Date().toISOString() } as any]).catch(() => {});
-    return { kind: "apikey", name: `key:${k.name}`, orgId: k.orgId, orgName: o.name, role: "collector", platformAdmin: false, keyId: k.id, keyHash: apiKeyHash(tok) };
+    return { kind: "apikey", name: `key:${k.name}`, orgId: k.orgId, orgName: o.name, role: "collector", platformAdmin: false, keyId: k.id, keyHash: apiKeyHash(tok), scopes: k.scopes?.length ? k.scopes : [...KEY_SCOPES] };
   }
 
   // 2. signed-in user (Supabase JWT has three dot-separated parts)
@@ -113,7 +130,7 @@ export async function authenticate(req: Request, d: AuthDeps): Promise<Principal
     else if (pref) m = pref;
     else throw new AuthError(409, "You belong to several organizations: send the x-org-id header to choose one.", { code: "choose_organization", organizations: mem.map((x) => ({ id: x.orgId, name: x.name, role: x.role })) });
     const platform = (env.PLATFORM_ADMIN_USER_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean).includes(u.id);
-    return { kind: "user", name: u.email ?? u.id, userId: u.id, email: u.email, orgId: m.orgId, orgName: m.name, orgRole: m.role, role: ROLE_MAP[m.role], platformAdmin: platform };
+    return { kind: "user", name: u.email ?? u.id, userId: u.id, email: u.email, orgId: m.orgId, orgName: m.name, orgRole: m.role, role: ROLE_MAP[m.role], platformAdmin: platform, aal: u.aal };
   }
 
   // 3. legacy shared tokens: Default organization only

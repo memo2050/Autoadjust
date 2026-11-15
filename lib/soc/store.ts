@@ -5,6 +5,7 @@ export interface Query {
   where?: Record<string, string | number | boolean>;
   gte?: [string, string];
   order?: [string, "asc" | "desc"];
+  offset?: number;
   limit?: number;
 }
 export interface Store {
@@ -14,6 +15,12 @@ export interface Store {
   select<T>(table: string, q?: Query): Promise<T[]>;
   get<T>(table: string, id: string): Promise<T | null>;
   remove(table: string, where: Record<string, string | number | boolean>): Promise<void>;
+  /** Count one hit for `key` in the current window and return the new count. Shared across instances on the database store. */
+  hit?(key: string, windowSec?: number): Promise<number>;
+  /** Rows whose id starts with `prefix` (soc_meta rows are namespaced "<orgId>:" and cannot be found by an org_id column). */
+  listPrefix?(table: string, prefix: string, limit?: number): Promise<any[]>;
+  /** Permanently delete everything the organization owns, in one transaction, after an approved + held deletion request. Database store: the hard_delete_org() function. */
+  hardDeleteOrg?(orgId: string, requestId: string, approver: string): Promise<{ counts: Record<string, number>; finalAuditSeq?: number | null }>;
 }
 
 export const T = {
@@ -39,10 +46,33 @@ export class MemoryStore implements Store {
     if (q.where) rows = rows.filter((r) => Object.entries(q.where!).every(([k, v]) => r[k] === v));
     if (q.gte) rows = rows.filter((r) => String(r[q.gte![0]] ?? "") >= q.gte![1]);
     if (q.order) { const [c, d] = q.order; rows.sort((a, b) => (a[c] < b[c] ? -1 : a[c] > b[c] ? 1 : 0) * (d === "desc" ? -1 : 1)); }
+    if (q.offset) rows = rows.slice(q.offset);
     if (q.limit) rows = rows.slice(0, q.limit);
     return structuredClone(rows) as R[];
   }
   async get<R>(table: string, id: string): Promise<R | null> { const r = this.tab(table).get(id); return r ? (structuredClone(r) as R) : null; }
+  async listPrefix(table: string, prefix: string, limit = 1000) { return structuredClone(Array.from(this.tab(table).values()).filter((r) => String(r.id ?? "").startsWith(prefix)).slice(0, limit)); }
+  async hardDeleteOrg(orgId: string, requestId: string, approver: string) {
+    const req = this.tab("org_deletion_requests").get(requestId);
+    if (!req || req.orgId !== orgId || req.status !== "approved") throw new Error("No approved deletion request for this organization");
+    if (Date.parse(req.holdUntil) > Date.now()) throw new Error("The 14-day hold has not ended");
+    if (orgId === "00000000-0000-0000-0000-000000000001") throw new Error("The Default organization cannot be deleted");
+    const org = this.tab("organizations").get(orgId); if (!org) throw new Error("Organization not found");
+    const audits = Array.from(this.tab("soc_audit").values()).filter((r) => r.orgId === orgId).sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0)), last = audits[audits.length - 1];
+    const counts: Record<string, number> = {};
+    for (const [name, m] of this.t) { if (name === "org_tombstones" || name === "org_deletion_requests" || name === "organizations") continue; for (const [k, r] of Array.from(m)) if (r.orgId === orgId || (name === "soc_meta" && String(r.id).startsWith(orgId + ":"))) { m.delete(k); counts[name] = (counts[name] ?? 0) + 1; } }
+    this.tab("organizations").delete(orgId);
+    const { createHash } = await import("node:crypto");
+    this.tab("org_tombstones").set(orgId, { id: orgId, orgId, nameSha256: createHash("sha256").update(String(org.name)).digest("hex"), deletedAt: new Date().toISOString(), requestId, approvedBy: approver, rowCounts: counts, finalAuditSeq: last?.seq ?? null, finalAuditHash: last?.hash ?? null });
+    req.status = "completed"; req.completedAt = new Date().toISOString();
+    return { counts, finalAuditSeq: last?.seq ?? null };
+  }
+  private hits = new Map<string, number>();
+  async hit(key: string, windowSec = 60) {
+    const w = Math.floor(Date.now() / 1000 / windowSec), k = key + "|" + w;
+    if (this.hits.size > 5000) for (const x of this.hits.keys()) if (!x.endsWith("|" + w)) this.hits.delete(x);
+    const n = (this.hits.get(k) ?? 0) + 1; this.hits.set(k, n); return n;
+  }
   async remove(table: string, where: Record<string, string | number | boolean>) {
     const m = this.tab(table);
     for (const [id, r] of Array.from(m)) if (Object.entries(where).every(([k, v]) => r[k] === v)) m.delete(id);
@@ -59,6 +89,7 @@ export class SupabaseStore implements Store {
     if (q.gte) p.set(snake(q.gte[0]), `gte.${q.gte[1]}`);
     if (q.order) p.set("order", `${snake(q.order[0])}.${q.order[1]}`);
     if (q.limit) p.set("limit", String(q.limit));
+    if (q.offset) p.set("offset", String(q.offset));
     return p.toString();
   }
   private async check(r: Response) { if (!r.ok) throw new Error(`Database error ${r.status}: ${(await r.text()).slice(0, 300)}`); return r; }
@@ -76,6 +107,19 @@ export class SupabaseStore implements Store {
     return ((await r.json()) as Record<string, unknown>[]).map((x) => mapKeys(x, camel)) as R[];
   }
   async get<R>(table: string, id: string): Promise<R | null> { return (await this.select<R>(table, { where: { id }, limit: 1 }))[0] ?? null; }
+  async listPrefix(table: string, prefix: string, limit = 1000) {
+    if (!/^[0-9a-f-]{36}:$/i.test(prefix)) throw new Error("listPrefix is only for organization id prefixes");
+    const r = await this.check(await this.f(`${this.url}/rest/v1/${table}?select=*&id=like.${encodeURIComponent(prefix)}*&limit=${limit}`, { headers: this.h() }));
+    return ((await r.json()) as Record<string, unknown>[]).map((x) => mapKeys(x, camel));
+  }
+  async hardDeleteOrg(orgId: string, requestId: string, approver: string) {
+    const r = await this.check(await this.f(`${this.url}/rest/v1/rpc/hard_delete_org`, { method: "POST", headers: this.h(), body: JSON.stringify({ p_org: orgId, p_request: requestId, p_approver: approver }) }));
+    const j: any = await r.json(); return { counts: j?.counts ?? {}, finalAuditSeq: j?.final_audit_seq ?? null };
+  }
+  async hit(key: string, windowSec = 60) {
+    const r = await this.check(await this.f(`${this.url}/rest/v1/rpc/rate_limit_hit`, { method: "POST", headers: this.h(), body: JSON.stringify({ p_key: key, p_window: windowSec }) }));
+    const n = Number(await r.json()); if (!Number.isFinite(n)) throw new Error("rate limiter returned no count"); return n;
+  }
   async remove(table: string, where: Record<string, string | number | boolean>) {
     await this.check(await this.f(`${this.url}/rest/v1/${table}?${this.qs({ where })}`, { method: "DELETE", headers: this.h() }));
   }

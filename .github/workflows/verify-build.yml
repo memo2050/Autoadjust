@@ -1,9 +1,8 @@
 name: verify-build
-# Runs the reproducible-build verification. No secrets, no deploy, no database. Manual or on pull requests that touch dependencies.
+# Runs the reproducible-build verification (typecheck, tests, build). No secrets, no deploy, no database. Manual or on every pull request.
 on:
   workflow_dispatch:
   pull_request:
-    paths: [package.json, package-lock.json, scripts/**, .github/workflows/verify-build.yml]
 permissions: { contents: read }   # read-only: this workflow never writes to the repository
 jobs:
   verify:
