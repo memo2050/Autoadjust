@@ -24,6 +24,7 @@ export interface Principal {
   userId?: string; email?: string;
   orgId: string; orgName?: string;
   orgRole?: OrgRole;          // users only
+  aal?: string;               // users only: authenticator assurance level from the sign-in token ("aal2" = second factor verified)
   keyId?: string; keyHash?: string; scopes?: string[];   // organization API keys only: which key this request used (executor binding + job signing)
   role: ApiRole;              // what the endpoints check
   platformAdmin: boolean;     // may update shared reference data (CISA KEV)
@@ -47,15 +48,17 @@ export function verifyJwtHs256(token: string, secret: string, now = Date.now()):
   } catch { return null; }
 }
 
-async function userFromToken(token: string, f: typeof fetch): Promise<{ id: string; email?: string; activeOrg?: string } | null> {
+async function userFromToken(token: string, f: typeof fetch): Promise<{ id: string; email?: string; activeOrg?: string; aal?: string } | null> {
   const secret = process.env.SUPABASE_JWT_SECRET;
-  if (secret) { const c = verifyJwtHs256(token, secret); return c ? { id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org } : null; }
+  if (secret) { const c = verifyJwtHs256(token, secret); return c ? { id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org, aal: typeof c.aal === "string" ? c.aal : undefined } : null; }
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const r = await f(`${url.replace(/\/$/, "")}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
   if (!r || !r.ok) return null;
   const u: any = await r.json().catch(() => null);
-  return u && typeof u.id === "string" && UUID_RE.test(u.id) ? { id: u.id, email: u.email, activeOrg: u.user_metadata?.active_org } : null;
+  // The auth server has just validated this token, so its (unverified-by-us) payload can be read for the assurance level.
+  let aal: string | undefined; try { const c = JSON.parse(b64u(token.split(".")[1]).toString()); if (typeof c.aal === "string") aal = c.aal; } catch { /* no aal claim: treated as aal1 */ }
+  return u && typeof u.id === "string" && UUID_RE.test(u.id) ? { id: u.id, email: u.email, activeOrg: u.user_metadata?.active_org, aal } : null;
 }
 
 /** Signed-in user without choosing an organization (used to create/list organizations and accept invitations). */
@@ -127,7 +130,7 @@ export async function authenticate(req: Request, d: AuthDeps): Promise<Principal
     else if (pref) m = pref;
     else throw new AuthError(409, "You belong to several organizations: send the x-org-id header to choose one.", { code: "choose_organization", organizations: mem.map((x) => ({ id: x.orgId, name: x.name, role: x.role })) });
     const platform = (env.PLATFORM_ADMIN_USER_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean).includes(u.id);
-    return { kind: "user", name: u.email ?? u.id, userId: u.id, email: u.email, orgId: m.orgId, orgName: m.name, orgRole: m.role, role: ROLE_MAP[m.role], platformAdmin: platform };
+    return { kind: "user", name: u.email ?? u.id, userId: u.id, email: u.email, orgId: m.orgId, orgName: m.name, orgRole: m.role, role: ROLE_MAP[m.role], platformAdmin: platform, aal: u.aal };
   }
 
   // 3. legacy shared tokens: Default organization only

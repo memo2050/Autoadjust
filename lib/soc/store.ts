@@ -14,6 +14,8 @@ export interface Store {
   select<T>(table: string, q?: Query): Promise<T[]>;
   get<T>(table: string, id: string): Promise<T | null>;
   remove(table: string, where: Record<string, string | number | boolean>): Promise<void>;
+  /** Count one hit for `key` in the current window and return the new count. Shared across instances on the database store. */
+  hit?(key: string, windowSec?: number): Promise<number>;
 }
 
 export const T = {
@@ -43,6 +45,12 @@ export class MemoryStore implements Store {
     return structuredClone(rows) as R[];
   }
   async get<R>(table: string, id: string): Promise<R | null> { const r = this.tab(table).get(id); return r ? (structuredClone(r) as R) : null; }
+  private hits = new Map<string, number>();
+  async hit(key: string, windowSec = 60) {
+    const w = Math.floor(Date.now() / 1000 / windowSec), k = key + "|" + w;
+    if (this.hits.size > 5000) for (const x of this.hits.keys()) if (!x.endsWith("|" + w)) this.hits.delete(x);
+    const n = (this.hits.get(k) ?? 0) + 1; this.hits.set(k, n); return n;
+  }
   async remove(table: string, where: Record<string, string | number | boolean>) {
     const m = this.tab(table);
     for (const [id, r] of Array.from(m)) if (Object.entries(where).every(([k, v]) => r[k] === v)) m.delete(id);
@@ -76,6 +84,10 @@ export class SupabaseStore implements Store {
     return ((await r.json()) as Record<string, unknown>[]).map((x) => mapKeys(x, camel)) as R[];
   }
   async get<R>(table: string, id: string): Promise<R | null> { return (await this.select<R>(table, { where: { id }, limit: 1 }))[0] ?? null; }
+  async hit(key: string, windowSec = 60) {
+    const r = await this.check(await this.f(`${this.url}/rest/v1/rpc/rate_limit_hit`, { method: "POST", headers: this.h(), body: JSON.stringify({ p_key: key, p_window: windowSec }) }));
+    const n = Number(await r.json()); if (!Number.isFinite(n)) throw new Error("rate limiter returned no count"); return n;
+  }
   async remove(table: string, where: Record<string, string | number | boolean>) {
     await this.check(await this.f(`${this.url}/rest/v1/${table}?${this.qs({ where })}`, { method: "DELETE", headers: this.h() }));
   }

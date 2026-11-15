@@ -1,3 +1,5 @@
+import { enforceMfa, mfaStatus, setOrgMfaPolicy, PRIVILEGED } from "../tenant/mfa";
+import { limit as limitRate } from "./ratelimit";
 import * as BILL from "../billing/service";
 import { pruneMetrics as prune } from "../noc/limits";
 import { getStore, T, type Store } from "./store";
@@ -43,8 +45,6 @@ const srcOk = (u: URL, s: DataSource) => { const f = u.searchParams.get("source"
 export interface Deps { store?: Store; model?: ModelFn | null; fetcher?: any }
 /** Does THIS organization have a Wazuh connection (its own, or the server environment for the Default organization)? */
 const wzConfigured = async (store: Store) => !!(await WC.resolveWazuhCfg(store).catch(() => ({}))); 
-const hits = new Map<string, number[]>();
-function rate(key: string, perMin: number) { const now = Date.now(), a = (hits.get(key) ?? []).filter((t) => now - t < 60000); if (a.length >= perMin) throw new HttpError(429, "Too many requests. Slow down and retry in a minute."); a.push(now); hits.set(key, a); }
 
 const legacySeen = new Map<string, number>();
 function legacyUsed(raw: Store, pr: Principal, actor: Actor) {
@@ -54,17 +54,18 @@ function legacyUsed(raw: Store, pr: Principal, actor: Actor) {
 export async function handleSoc(req: Request, path: string[], deps: Deps = {}): Promise<Response> {
   try {
     const raw = deps.store ?? getStore();
+    const rate = (key: string, perMin: number) => limitRate(raw, key, perMin);
     const u = new URL(req.url), m = req.method.toUpperCase(), [a, b, c] = path;
     if (a === "org" && ((b === "create" && m === "POST") || (b === "mine" && m === "GET") || (b === "invitations" && c === "accept" && m === "POST"))) {
       const user = await identifyUser(req, { raw, fetcher: (deps as any).fetcher });
       if (!user) return json({ error: "Sign in first." }, 401);
-      rate(user.id + ":org", 20);
+      await rate(user.id + ":org", 20);
       if (b === "mine") return json({ organizations: await ORG.myOrganizations(raw, user.id) });
       if (b === "create") return json(await ORG.createOrganization(raw, user, await readJson(req)), 201);
       return json(await ORG.acceptInvite(raw, user, await readJson(req)));
     }
     if (a === "billing" && b === "webhook" && m === "POST") {                       // public endpoint: authenticated ONLY by the Stripe signature over the raw body
-      rate("billing-webhook", 300); const body = await req.text(); if (body.length > 512_000) throw new HttpError(413, "Payload too large.");
+      await rate("billing-webhook", 300); const body = await req.text(); if (body.length > 512_000) throw new HttpError(413, "Payload too large.");
       return json(await BILL.handleWebhook(raw, body, req.headers.get("stripe-signature"), (deps as any).env ?? process.env));
     }
     const pr = await authenticate(req, { raw, fetcher: (deps as any).fetcher, env: { ...process.env, ...((deps as any).env ?? {}) } });
@@ -72,6 +73,8 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       // A signed-in user who has no organization yet may only create one, list theirs, or accept an invitation.
       return json({ error: "Not authorized. Sign in, or provide an organization API key." }, 401);
     }
+    const envAll = { ...process.env, ...((deps as any).env ?? {}) };
+    await enforceMfa(raw, pr, m, envAll);                        // owner/it_admin/platform admin (and everyone, if the org requires it) need a verified second factor to change anything
     const store = new ScopedStore(raw, pr.orgId, { platformAdmin: pr.platformAdmin });
     const actor: Actor = { name: pr.name, role: pr.orgRole ?? pr.role }, role = pr.role;
     if (pr.kind === "legacy") legacyUsed(raw, pr, actor);        // visible warning in the audit log: a shared token is still in use (switch SOC_LEGACY_TOKENS off only when none appear)
@@ -86,13 +89,13 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       if (b === "usage" && m === "GET") { need("read"); return json(await BILL.usage(raw, pr.orgId, env)); }
       if (b === "invoices" && m === "GET") return json(await BILL.listInvoices(raw, pr));
       if (b === "payments" && m === "GET") return json(await BILL.listPayments(raw, pr));
-      if (b === "checkout" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createCheckout(raw, pr, await readJson(req), env)); }
-      if (b === "portal" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createPortal(raw, pr, env)); }
-      if (b === "change" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.changePlan(raw, pr, await readJson(req), env)); }
-      if (b === "cancel" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, true, env)); }
-      if (b === "resume" && m === "POST") { rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, false, env)); }
+      if (b === "checkout" && m === "POST") { await rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createCheckout(raw, pr, await readJson(req), env)); }
+      if (b === "portal" && m === "POST") { await rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.createPortal(raw, pr, env)); }
+      if (b === "change" && m === "POST") { await rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.changePlan(raw, pr, await readJson(req), env)); }
+      if (b === "cancel" && m === "POST") { await rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, true, env)); }
+      if (b === "resume" && m === "POST") { await rate((pr.userId ?? pr.orgId) + ":bill", 10); return json(await BILL.setCancel(raw, pr, false, env)); }
       if (b === "admin") {                                                       // platform administrators only (checked again inside every function)
-        rate((pr.userId ?? pr.name) + ":badmin", 60); const o = path[3];
+        await rate((pr.userId ?? pr.name) + ":badmin", 60); const o = path[3];
         if (c === "plans" && !o && m === "GET") return json(await BILL.adminPlans(raw, pr));
         if (c === "plans" && o && m === "PUT") return json(await BILL.adminUpdatePlan(raw, pr, o, await readJson(req)));
         if (c === "settings" && m === "PUT") return json(await BILL.adminSettings(raw, pr, await readJson(req)));
@@ -110,16 +113,23 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     if (a === "org") {
       const user = pr.userId ? { id: pr.userId, email: pr.email } : null;
       const needUser = () => { if (!user) throw new HttpError(403, "Organization management needs a signed-in user account."); return user; };
+      if (b === "mfa" && m === "GET") return json(await mfaStatus(raw, pr, envAll));
+      if (b === "mfa" && m === "POST") {
+        need("approve"); if (pr.kind !== "user" || !PRIVILEGED.includes(pr.orgRole ?? "")) throw new HttpError(403, "Only an owner or IT admin can change the organization's MFA policy.");
+        const body = await readJson(req); if (typeof body?.requireMfa !== "boolean") throw new HttpError(400, "requireMfa must be true or false.");
+        await setOrgMfaPolicy(raw, pr.orgId, body.requireMfa); await audit(store, actor, "org.mfa_policy", pr.orgId, { requireMfa: body.requireMfa });
+        return json(await mfaStatus(raw, pr, envAll));
+      }
       if (b === "current" && m === "GET") return json({ id: pr.orgId, name: pr.orgName ?? null, role: pr.orgRole ?? role, kind: pr.kind });
       if (b === "members" && !c && m === "GET") { need("read"); return json(await ORG.listMembers(raw, pr)); }
       if (b === "members" && c && m === "PATCH") return json(await ORG.changeRole(raw, pr, c, await readJson(req)));
       if (b === "members" && c && m === "DELETE") return json(await ORG.removeMember(raw, pr, c));
       if (b === "invitations" && !c && m === "GET") return json(await ORG.listInvites(raw, pr));
-      if (b === "invitations" && !c && m === "POST") { rate(pr.name + ":invite", 30); return json(await ORG.invite(raw, pr, await readJson(req)), 201); }
+      if (b === "invitations" && !c && m === "POST") { await rate(pr.name + ":invite", 30); return json(await ORG.invite(raw, pr, await readJson(req)), 201); }
       if (b === "invitations" && c && m === "DELETE") return json(await ORG.revokeInvite(raw, pr, c));
       if (b === "keys" && !c && m === "GET") return json(await ORG.listKeys(raw, pr));
-      if (b === "keys" && !c && m === "POST") { rate(pr.name + ":keys", 10); return json(await ORG.createKey(raw, pr, await readJson(req)), 201); }
-      if (b === "keys" && c && path[3] === "rotate" && m === "POST") { rate(pr.name + ":keys", 10); return json(await ORG.rotateKey(raw, pr, c, await readJson(req)), 201); }
+      if (b === "keys" && !c && m === "POST") { await rate(pr.name + ":keys", 10); return json(await ORG.createKey(raw, pr, await readJson(req)), 201); }
+      if (b === "keys" && c && path[3] === "rotate" && m === "POST") { await rate(pr.name + ":keys", 10); return json(await ORG.rotateKey(raw, pr, c, await readJson(req)), 201); }
       if (b === "keys" && c && m === "DELETE") return json(await ORG.revokeKey(raw, pr, c));
       if (b === "audit" && m === "GET") { need("audit"); return json(await store.select(T.audit, { order: ["seq", "desc"], limit: lim(u, 100, 500) })); }
       needUser();
@@ -128,20 +138,20 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
 
     if (a === "me" && m === "GET") return json({ actor: actor.name, role, orgRole: pr.orgRole ?? null, organization: { id: pr.orgId, name: pr.orgName ?? null }, auth: pr.kind, dev: pr.kind === "dev", store: store.kind, aiConfigured: !!(deps.model !== undefined ? deps.model : defaultModel()) });
 
-    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
+    if (a === "noc" && b === "telemetry" && m === "POST") { need("ingest"); scope("noc"); await rate(actor.name + ":telemetry", 240); const res = await RT.ingestAndEvaluate({ store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver }, await readJson(req)); await audit(store, actor, "noc.telemetry", "noc", { devices: res.received }); return json(res); }
     const xc: XJ.ExecCtx = { store, actor, orgId: pr.orgId, pr };
-    if (a === "noc" && b === "executor" && c === "jobs" && !path[3] && m === "GET") { need("ingest"); scope("executor"); rate(actor.name + ":xpoll", 120); return json(await XJ.pollJobs(xc, String(u.searchParams.get("host") ?? ""))); }
-    if (a === "noc" && b === "executor" && c === "jobs" && path[3] && path[4] === "result" && m === "POST") { need("ingest"); scope("executor"); rate(actor.name + ":xres", 120); return json(await XJ.acceptResult(xc, path[3], await readJson(req))); }
+    if (a === "noc" && b === "executor" && c === "jobs" && !path[3] && m === "GET") { need("ingest"); scope("executor"); await rate(actor.name + ":xpoll", 120); return json(await XJ.pollJobs(xc, String(u.searchParams.get("host") ?? ""))); }
+    if (a === "noc" && b === "executor" && c === "jobs" && path[3] && path[4] === "result" && m === "POST") { need("ingest"); scope("executor"); await rate(actor.name + ":xres", 120); return json(await XJ.acceptResult(xc, path[3], await readJson(req))); }
     if (a === "noc" && ["alerts", "push", "executions", "scans", "changes"].includes(b ?? "") && !(["executions", "scans", "changes"].includes(b ?? "") && m === "GET" && c !== "pending") && !(["scans", "changes"].includes(b ?? "") && m === "POST" && !path[3] ) && !(b === "changes" && c && ["approve", "reject", "rollback"].includes(path[3] ?? ""))) {
       const nc: N.Ctx = { store, actor, deviceMax: await BILL.deviceLimit(raw, pr.orgId, (deps as any).env ?? process.env), model: deps.model !== undefined ? deps.model : defaultModel(), fetcher: (deps as any).fetcher, resolver: (deps as any).resolver };
       if (b === "scans" && c === "pending" && m === "GET") { need("ingest"); scope("discovery"); return json(await TP.claimScan(nc, String(u.searchParams.get("agent") ?? actor.name))); }
-      if (b === "scans" && c && path[3] === "progress" && m === "POST") { need("ingest"); scope("discovery"); rate(actor.name + ":scanp", 240); return json(await TP.reportScan(nc, c, await readJson(req))); }
+      if (b === "scans" && c && path[3] === "progress" && m === "POST") { need("ingest"); scope("discovery"); await rate(actor.name + ":scanp", 240); return json(await TP.reportScan(nc, c, await readJson(req))); }
       if (b === "scans" && c && path[3] === "complete" && m === "POST") { need("ingest"); scope("discovery"); return json(await TP.finishScan(nc, c, await readJson(req))); }
       if (b === "changes" && c === "pending" && m === "GET") { need("ingest"); scope("executor"); return json(await CH.claimChanges(nc)); }
       if (b === "changes" && c && path[3] === "backup" && m === "POST") { need("ingest"); scope("executor"); return json(await CH.executorBackup(nc, c, await readJson(req))); }
       if (b === "changes" && c && path[3] === "result" && m === "POST") { need("ingest"); scope("executor"); return json(await CH.executorResult(nc, c, await readJson(req))); }
-      if (b === "alerts" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":alerts", 120); const al = N.normalizeAlerts(await readJson(req)); return json({ results: await N.receiveAlerts(nc, al, u.searchParams.get("source") ?? undefined) }); }
-      if (b === "push" && m === "POST") { need("ingest"); scope("noc"); rate(actor.name + ":push", 60); return json(await pushSnapshot(nc, await readJson(req))); }
+      if (b === "alerts" && m === "POST") { need("ingest"); scope("noc"); await rate(actor.name + ":alerts", 120); const al = N.normalizeAlerts(await readJson(req)); return json({ results: await N.receiveAlerts(nc, al, u.searchParams.get("source") ?? undefined) }); }
+      if (b === "push" && m === "POST") { need("ingest"); scope("noc"); await rate(actor.name + ":push", 60); return json(await pushSnapshot(nc, await readJson(req))); }
       if (b === "executions" && c === "pending" && m === "GET") { need("ingest"); scope("executor"); return json({ executions: await N.pendingExecutions(nc) }); }
       if (b === "executions" && c && path[3] === "result" && m === "POST") { need("ingest"); scope("executor"); return json(await N.reportExecution(nc, c, await readJson(req))); }
     }
@@ -156,14 +166,14 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     }
 
     // Wazuh bridge endpoints (ingest role only, before the read gate)
-    if (a === "ingest" && b === "wazuh" && m === "POST") { need("ingest"); scope("soc"); rate(actor.name + ":wazuh", 60); const body = await readJson(req); try { return json(await WZ.ingestWazuh(store, body, { source: "live", mode: "bridge", actor })); } catch (e: any) { await WZ.recordWazuhError(store, e.message, "bridge", actor).catch(() => {}); throw e; } }
+    if (a === "ingest" && b === "wazuh" && m === "POST") { need("ingest"); scope("soc"); await rate(actor.name + ":wazuh", 60); const body = await readJson(req); try { return json(await WZ.ingestWazuh(store, body, { source: "live", mode: "bridge", actor })); } catch (e: any) { await WZ.recordWazuhError(store, e.message, "bridge", actor).catch(() => {}); throw e; } }
     if (a === "wazuh" && b === "cursor" && m === "GET") { need("ingest"); scope("soc"); const st = await WZ.wazuhStatus(store); return json({ cursor: st.cursor }); }
     if (a === "wazuh" && b === "bridge-error" && m === "POST") { need("ingest"); scope("soc"); await WZ.recordWazuhError(store, String((await readJson(req)).error ?? "unknown"), "bridge", actor); return json({ ok: true }); }
     if (a === "wazuh" && b === "bridge-test" && m === "POST") { need("ingest"); scope("soc"); const t = (await readJson(req)) as WZ.WazuhTest; const st = (await store.get<any>(T.meta, "wazuh")) ?? { id: "wazuh", data: { alertsReceived: 0 } }; st.data.lastTest = { at: new Date().toISOString(), by: actor.name, mode: "bridge", ok: !!t.ok, steps: (t.steps ?? []).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 80), ok: !!x.ok, detail: String(x.detail).slice(0, 300) })) }; await store.upsert(T.meta, [st]); await audit(store, actor, "wazuh.test.bridge", "wazuh", { ok: !!t.ok }); return json({ ok: true }); }
     need("read");
     if (a === "overview" && m === "GET") return json(await overview(store));
     if (a === "ai" && b === "analyze" && m === "POST") {
-      rate(actor.name + ":aisoc", 20); const body = await readJson(req).catch(() => ({})); const canP = allowed(pr, "write", "soc") || allowed(pr, "write", "noc"); if (body?.proposeDiagnostics === true && !canP) throw new HttpError(403, "Not allowed to propose diagnostics.");
+      await rate(actor.name + ":aisoc", 20); const body = await readJson(req).catch(() => ({})); const canP = allowed(pr, "write", "soc") || allowed(pr, "write", "noc"); if (body?.proposeDiagnostics === true && !canP) throw new HttpError(403, "Not allowed to propose diagnostics.");
       const prop = async (list: any[]) => { const out: any[] = []; for (const d of list.slice(0, 5)) { try { const jb = await XJ.requestDiag({ ...xc, actor: { name: "agent:soc-analyst", role: "agent" } }, { hostId: d.hostId, template: d.template, params: d.params, reason: d.why }); out.push({ ...d, status: "proposed_awaiting_human", jobId: jb.id }); } catch (e: any) { out.push({ ...d, why: `${d.why} (not proposed: ${String(e?.message ?? e).slice(0, 120)})` }); } } return out.concat(list.slice(5)); };
       return json(await analyzeSoc(store, { incidentId: body?.incidentId, proposeDiagnostics: body?.proposeDiagnostics === true ? prop : undefined }, actor, deps.model !== undefined ? deps.model : defaultModel()));
     }
@@ -172,69 +182,69 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
       const canDiag = allowed(pr, "write", "noc") || allowed(pr, "write", "soc");
 
       const proposer = (agent: string, incidentId?: string) => async (list: any[]) => { const out: any[] = []; for (const d of list.slice(0, 5)) { try { const j = await XJ.requestDiag({ ...xc, actor: { name: agent, role: "agent" } }, { hostId: d.hostId, template: d.template, params: d.params, reason: d.why, incidentId }); out.push({ ...d, status: "proposed_awaiting_human", jobId: j.id }); } catch (e: any) { out.push({ ...d, why: `${d.why} (not proposed: ${String(e?.message ?? e).slice(0, 120)})` }); } } return out.concat(list.slice(5)); };
-      if (b === "ai" && c === "analyze" && m === "POST") { rate(actor.name + ":ainoc", 20); const body = await readJson(req).catch(() => ({})); if (body?.proposeDiagnostics === true && !canDiag) throw new HttpError(403, "Not allowed to propose diagnostics."); return json(await analyzeNoc(nc, { deviceId: body?.deviceId, incidentId: body?.incidentId, hours: Number(body?.hours) || undefined, proposeDiagnostics: body?.proposeDiagnostics === true ? proposer("agent:noc-analyst", body?.incidentId) : undefined }, nc.model ?? null)); }
+      if (b === "ai" && c === "analyze" && m === "POST") { await rate(actor.name + ":ainoc", 20); const body = await readJson(req).catch(() => ({})); if (body?.proposeDiagnostics === true && !canDiag) throw new HttpError(403, "Not allowed to propose diagnostics."); return json(await analyzeNoc(nc, { deviceId: body?.deviceId, incidentId: body?.incidentId, hours: Number(body?.hours) || undefined, proposeDiagnostics: body?.proposeDiagnostics === true ? proposer("agent:noc-analyst", body?.incidentId) : undefined }, nc.model ?? null)); }
       if (b === "exec" && c === "stats" && m === "GET") return json(await XJ.execStats(xc));
       if (b === "exec" && c === "settings" && m === "GET") return json(await XJ.getSettings(xc));
-      if (b === "exec" && c === "settings" && m === "PUT") { rate(actor.name + ":xset", 10); return json(await XJ.setSettings(xc, (await readJson(req))?.enabled)); }
+      if (b === "exec" && c === "settings" && m === "PUT") { await rate(actor.name + ":xset", 10); return json(await XJ.setSettings(xc, (await readJson(req))?.enabled)); }
       if (b === "exec" && c === "templates" && m === "GET") return json(CATALOG.map((t) => ({ id: t.id, title: t.title, tier: t.tier, params: t.params, timeoutSec: t.timeoutSec, maxLines: t.maxLines, maxBytes: t.maxBytes, linux: t.linux ? xPreview(t, "linux", Object.fromEntries(Object.keys(t.params).map((k) => [k, `<${k}>`]))) : null, windows: t.windows ? xPreview(t, "windows", Object.fromEntries(Object.keys(t.params).map((k) => [k, `<${k}>`]))) : null })));
       if (b === "exec" && c === "executors" && !path[3] && m === "GET") return json(await XJ.listExecutors(xc));
-      if (b === "exec" && c === "executors" && !path[3] && m === "POST") { need("approve"); rate(actor.name + ":xreg", 20); return json(await XJ.registerExecutor(xc, await readJson(req), raw), 201); }
+      if (b === "exec" && c === "executors" && !path[3] && m === "POST") { need("approve"); await rate(actor.name + ":xreg", 20); return json(await XJ.registerExecutor(xc, await readJson(req), raw), 201); }
       if (b === "exec" && c === "executors" && path[3] && (path[4] === "enable" || path[4] === "disable") && m === "POST") { need("approve"); return json(await XJ.setExecutorEnabled(xc, path[3], path[4] === "enable")); }
       if (b === "diag" && !c && m === "POST") { const body = await readJson(req); if (body?.dryRun === true) need("read"); else if (pr.kind !== "user") throw new HttpError(403, "Real diagnostics must be requested by a signed-in person, not by an API key.");
-          else if (!canDiag) throw new HttpError(403, `Your role (${pr.orgRole ?? role}) cannot run diagnostics.`); rate(actor.name + ":diag", 60); return json(await XJ.requestDiag(xc, body), 201); }
+          else if (!canDiag) throw new HttpError(403, `Your role (${pr.orgRole ?? role}) cannot run diagnostics.`); await rate(actor.name + ":diag", 60); return json(await XJ.requestDiag(xc, body), 201); }
       if (b === "diag" && !c && m === "GET") return json(await XJ.listJobs(xc, { status: u.searchParams.get("status") ?? undefined, incident: u.searchParams.get("incident") ?? undefined, host: u.searchParams.get("host") ?? undefined, limit: lim(u, 100, 500) }));
       if (b === "diag" && c && !path[3] && m === "GET") return json(await XJ.getJob(xc, c));
-      if (b === "diag" && c && (path[3] === "approve" || path[3] === "reject") && m === "POST") { const j = await XJ.getJob(xc, c); if (j.tier === "R1") need("approve"); else if (!canDiag) throw new HttpError(403, `Your role (${pr.orgRole ?? role}) cannot decide diagnostics.`); rate(actor.name + ":diagdec", 60); return json(await XJ.confirmJob(xc, c, path[3], (await readJson(req).catch(() => ({})))?.note)); }
+      if (b === "diag" && c && (path[3] === "approve" || path[3] === "reject") && m === "POST") { const j = await XJ.getJob(xc, c); if (j.tier === "R1") need("approve"); else if (!canDiag) throw new HttpError(403, `Your role (${pr.orgRole ?? role}) cannot decide diagnostics.`); await rate(actor.name + ":diagdec", 60); return json(await XJ.confirmJob(xc, c, path[3], (await readJson(req).catch(() => ({})))?.note)); }
       if (b === "diag" && c && path[3] === "cancel" && m === "POST") { if (!canDiag) throw new HttpError(403, "Not allowed."); return json(await XJ.cancelJob(xc, c)); }
       if (b === "availability" && m === "GET") return json(await RT.availability(nc, Math.max(1, Math.min(720, Number(u.searchParams.get("hours")) || 24)), u.searchParams.get("device") ?? undefined));
       if (b === "history" && m === "GET") return json(await RT.history(nc, String(u.searchParams.get("device") ?? ""), String(u.searchParams.get("key") ?? "cpu"), Math.max(1, Math.min(720, Number(u.searchParams.get("hours")) || 24)), lim(u, 1000, 5000)));
-      if (b === "overview" && m === "GET") { rate(actor.name + ":ov", 240); await N.sweepSources(nc); await RT.sweepDevices(nc); return json(await nocOverview(nc)); }
-      if (b === "sources" && !c && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.createSource(nc, await readJson(req)), 201); }
-      if (b === "sources" && c && path[3] === "test" && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.testSource(nc, c)); }
+      if (b === "overview" && m === "GET") { await rate(actor.name + ":ov", 240); await N.sweepSources(nc); await RT.sweepDevices(nc); return json(await nocOverview(nc)); }
+      if (b === "sources" && !c && m === "POST") { need("approve"); await rate(actor.name + ":cfg", 30); return json(await N.createSource(nc, await readJson(req)), 201); }
+      if (b === "sources" && c && path[3] === "test" && m === "POST") { need("approve"); await rate(actor.name + ":cfg", 30); return json(await N.testSource(nc, c)); }
       if (b === "retention" && m === "POST") {                       // dry run by default; deletes only when apply:true AND billing enforcement is on; only old noc_metrics samples
-        need("approve"); rate(actor.name + ":retention", 6); const body: any = await readJson(req), env2 = (deps as any).env ?? process.env, e = await BILL.getEntitlements(raw, pr.orgId, Date.now(), env2);
+        need("approve"); await rate(actor.name + ":retention", 6); const body: any = await readJson(req), env2 = (deps as any).env ?? process.env, e = await BILL.getEntitlements(raw, pr.orgId, Date.now(), env2);
         if (body?.apply === true && !e.enforced) throw new HttpError(409, "Plan limits are not enforced on this server, so nothing is pruned. Run without apply for a report.");
         const r = await prune(store, e.retentionDays, { apply: body?.apply === true });
         if (r.applied) await audit(store, actor, "noc.retention.prune", pr.orgId, { retentionDays: r.retentionDays, deleted: r.deleted }); return json({ plan: e.plan, enforced: e.enforced, ...r });
       }
-      if (b === "sources" && c && path[3] === "sync" && m === "POST") { need("approve"); rate(actor.name + ":cfg", 30); return json(await N.syncSource(nc, c)); }
+      if (b === "sources" && c && path[3] === "sync" && m === "POST") { need("approve"); await rate(actor.name + ":cfg", 30); return json(await N.syncSource(nc, c)); }
       if (b === "sources" && c && !path[3] && m === "DELETE") { need("approve"); return json(await N.deleteSource(nc, c)); }
       if (b === "actions" && !c && m === "POST") { need("approve"); return json(await N.createAction(nc, await readJson(req)), 201); }
-      if (b === "approvals" && c && (path[3] === "approve" || path[3] === "reject") && m === "POST") { need("approve"); rate(actor.name + ":appr", 30); const bd = await readJson(req); return json(await N.decideApproval(nc, c, path[3] as any, bd?.note)); }
+      if (b === "approvals" && c && (path[3] === "approve" || path[3] === "reject") && m === "POST") { need("approve"); await rate(actor.name + ":appr", 30); const bd = await readJson(req); return json(await N.decideApproval(nc, c, path[3] as any, bd?.note)); }
       if (b === "incidents" && c && path[3] === "verify" && m === "POST") { need("write"); return json({ incident: await N.verifyIncident(nc, c) }); }
       if (b === "topology" && m === "GET") return json(await TP.topology(nc, u.searchParams.get("map") ?? undefined));
       if (b === "discovery" && m === "GET") return json(await TP.discoveryView(nc));
-      if (b === "scopes" && !c && m === "POST") { need("approve"); rate(actor.name + ":scope", 20); return json(await TP.createScope(nc, await readJson(req)), 201); }
+      if (b === "scopes" && !c && m === "POST") { need("approve"); await rate(actor.name + ":scope", 20); return json(await TP.createScope(nc, await readJson(req)), 201); }
       if (b === "scopes" && c && m === "DELETE") { need("approve"); return json(await TP.deleteScope(nc, c)); }
-      if (b === "scans" && !c && m === "POST") { need("approve"); rate(actor.name + ":scan", 10); return json(await TP.startScan(nc, await readJson(req)), 201); }
+      if (b === "scans" && !c && m === "POST") { need("approve"); await rate(actor.name + ":scan", 10); return json(await TP.startScan(nc, await readJson(req)), 201); }
       if (b === "scans" && c && path[3] === "cancel" && m === "POST") { need("approve"); return json(await TP.cancelScan(nc, c)); }
       if (b === "devices" && c && path[3] === "adopt" && m === "POST") { need("approve"); return json(await TP.adopt(nc, c)); }
       if (b === "maps" && !c && m === "GET") return json(await TP.listMaps(nc));
       if (b === "maps" && !c && m === "POST") { need("write"); return json(await TP.createMap(nc, await readJson(req)), 201); }
-      if (b === "maps" && c && path[3] === "save" && m === "POST") { need("write"); rate(actor.name + ":mapsave", 60); return json(await TP.saveMap(nc, c, await readJson(req))); }
+      if (b === "maps" && c && path[3] === "save" && m === "POST") { need("write"); await rate(actor.name + ":mapsave", 60); return json(await TP.saveMap(nc, c, await readJson(req))); }
       if (b === "maps" && c && path[3] === "versions" && m === "GET") return json(await TP.mapVersions(nc, c));
       if (b === "maps" && c && path[3] === "restore" && m === "POST") { need("write"); return json(await TP.restoreVersion(nc, c, Number((await readJson(req)).version))); }
       if (b === "backups" && c && m === "GET") { need("write"); return json(await CH.listBackups(nc, c)); }
       if (b === "backups" && c && m === "POST") { need("write"); return json(await CH.addBackup(nc, c, String((await readJson(req)).config ?? ""))); }
       if (b === "changes" && !c && m === "GET") return json(await CH.listChanges(nc));
-      if (b === "changes" && !c && m === "POST") { need("write"); rate(actor.name + ":chg", 30); return json(await CH.proposeChange(nc, await readJson(req)), 201); }
+      if (b === "changes" && !c && m === "POST") { need("write"); await rate(actor.name + ":chg", 30); return json(await CH.proposeChange(nc, await readJson(req)), 201); }
       if (b === "changes" && c && (path[3] === "approve" || path[3] === "reject") && m === "POST") { need("approve"); return json(await CH.decideChange(nc, c, path[3] as any, await readJson(req))); }
       if (b === "changes" && c && path[3] === "rollback" && m === "POST") { need("approve"); return json(await CH.proposeRollback(nc, c)); }
-      if (b === "agents" && c && path[3] === "run" && m === "POST") { need("write"); rate(actor.name + ":agent", 30); return json({ activity: await nocRun(nc, c, await readJson(req)) }); }
+      if (b === "agents" && c && path[3] === "run" && m === "POST") { need("write"); await rate(actor.name + ":agent", 30); return json({ activity: await nocRun(nc, c, await readJson(req)) }); }
     }
     if (a === "noc" && b === "devices" && m === "GET") { need("read"); return json(await listDevices(store)); }
     // ---- Wazuh (read-only integration) ----
     if (a === "wazuh" && b === "status" && m === "GET") { need("read"); return json(await WZ.wazuhStatus(store, Date.now(), await wzConfigured(store))); }
-    if (a === "wazuh" && b === "sync" && m === "POST") { need("ingest"); scope("soc"); rate(actor.name + ":wzsync", 20); return json(await WZ.syncWazuh(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver))); }
-    if (a === "wazuh" && b === "test" && c === "connection" && m === "POST") { need("approve"); rate(actor.name + ":wztest", 10); return json(await WZ.testWazuhConnection(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver).catch((e) => { throw e; }))); }
+    if (a === "wazuh" && b === "sync" && m === "POST") { need("ingest"); scope("soc"); await rate(actor.name + ":wzsync", 20); return json(await WZ.syncWazuh(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver))); }
+    if (a === "wazuh" && b === "test" && c === "connection" && m === "POST") { need("approve"); await rate(actor.name + ":wztest", 10); return json(await WZ.testWazuhConnection(store, actor, (deps as any).fetcher ?? fetch, (deps as any).wazuhCfg !== undefined ? (deps as any).wazuhCfg : await WC.resolveWazuhCfg(store, process.env, (deps as any).resolver).catch((e) => { throw e; }))); }
     if (a === "wazuh" && b === "config" && m === "GET") { need("approve"); return json(await WC.getWazuhConfigPublic(store)); }
-    if (a === "wazuh" && b === "config" && m === "PUT") { need("approve"); rate(actor.name + ":wzcfg", 20); return json(await WC.saveWazuhConfig(store, actor, await readJson(req), process.env, (deps as any).resolver)); }
+    if (a === "wazuh" && b === "config" && m === "PUT") { need("approve"); await rate(actor.name + ":wzcfg", 20); return json(await WC.saveWazuhConfig(store, actor, await readJson(req), process.env, (deps as any).resolver)); }
     if (a === "wazuh" && b === "config" && m === "DELETE") { need("approve"); return json(await WC.deleteWazuhConfig(store, actor)); }
     if (a === "wazuh" && b === "enrollment" && m === "GET") {
       need("read"); const cfg = await WC.getWazuhConfigPublic(store) as any, st = await WZ.wazuhStatus(store);
       return json(WC.enrollment(u.searchParams.get("os") ?? "", String(cfg.agentManager ?? ""), u.searchParams.get("version") ?? String(st.manager ?? "").replace(/^v/i, "").match(/^\d+\.\d+\.\d+/)?.[0] ?? "", u.searchParams.get("name") ?? undefined));
     }
-    if (a === "wazuh" && b === "test" && c === "event" && m === "POST") { need("approve"); rate(actor.name + ":wztest", 10); return json(await WZ.wazuhSelfTest(store, actor)); }
+    if (a === "wazuh" && b === "test" && c === "event" && m === "POST") { need("approve"); await rate(actor.name + ":wztest", 10); return json(await WZ.wazuhSelfTest(store, actor)); }
     if (a === "wazuh" && b === "test" && c === "cleanup" && m === "POST") { need("approve"); return json(await WZ.wazuhSelfTestCleanup(store, actor)); }
     if (a === "collectors" && m === "GET") return json(await collectors(store));
     if (a === "integrations" && m === "GET") return json({ integrations: await integrations(store, deps) });
@@ -365,7 +375,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
   } catch (e) {
     if (e instanceof AuthError) return json({ error: e.message, ...(e.extra ?? {}) }, e.status);
     if (e instanceof TenantError) return json({ error: e.message }, e.status);
-    if (e instanceof HttpError) return json({ error: e.message, ...(e.extra ?? {}) }, e.status);
+    if (e instanceof HttpError) { const { retryAfter, ...rest } = (e.extra ?? {}) as Record<string, unknown>; const r = json({ error: e.message, ...rest }, e.status); if (typeof retryAfter === "number") r.headers.set("Retry-After", String(retryAfter)); return r; }
     console.error("soc api error", e);
     return json({ error: "Server error. Check the server logs." }, 500);
   }
