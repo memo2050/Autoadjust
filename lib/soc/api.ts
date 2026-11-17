@@ -52,8 +52,11 @@ function legacyUsed(raw: Store, pr: Principal, actor: Actor) {
   const now = Date.now(); if (now - (legacySeen.get(pr.name) ?? 0) < 600000) return; legacySeen.set(pr.name, now);
   audit(new ScopedStore(raw, pr.orgId), actor, "auth.legacy_token_used", pr.name, { note: "A shared SOC_*_TOKEN authenticated. Move this collector to its own key, then set SOC_LEGACY_TOKENS=off." }).catch(() => {});
 }
+import { envViolations } from "../tenant/env-isolation";
 export async function handleSoc(req: Request, path: string[], deps: Deps = {}): Promise<Response> {
   try {
+    const bad = envViolations((deps as any).env ?? process.env);     // staging/production isolation: refuse to serve rather than risk mixing environments
+    if (bad.length) return json({ error: "Environment configuration is unsafe; the service refuses to run.", problems: bad }, 503);
     const raw = deps.store ?? getStore();
     const rate = (key: string, perMin: number) => limitRate(raw, key, perMin);
     const u = new URL(req.url), m = req.method.toUpperCase(), [a, b, c] = path;

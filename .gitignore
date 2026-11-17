@@ -13,3 +13,4 @@ secret*.txt
 *.log
 tests/**/artifacts/
 verification-logs/
+backups/

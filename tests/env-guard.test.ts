@@ -17,3 +17,13 @@ test("guard: production needs owner approval string and a production database", 
   assert.equal(checkTarget({ ...p, DATABASE_URL: url(STG), EXPECTED_PROJECT_REF: STG, CONFIRM_PROJECT_REF: STG, RELEASE_APPROVAL: "APPROVED-BY-OWNER" } as any).ok, false, "production target on a non-production database");
 });
 test("guard: never prints the connection string", () => { const r = checkTarget({ ...base, DATABASE_URL: "postgresql://postgres:SuperSecret1@db.bad.supabase.co/postgres" } as any); assert.ok(!JSON.stringify(r).includes("SuperSecret1")); });
+import { envViolations } from "../lib/tenant/env-isolation";
+test("runtime isolation: staging cannot use the production project or live Stripe; unset APP_ENV is unchanged", () => {
+  const P = "zyxwvutsrqponmlkjihg", S = "abcdefghijklmnopqrst";
+  assert.deepEqual(envViolations({}), []);
+  assert.deepEqual(envViolations({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co` } as any), []);
+  assert.equal(envViolations({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co` } as any).length, 1);
+  assert.equal(envViolations({ APP_ENV: "staging", STRIPE_SECRET_KEY: "sk_live_x" } as any).length, 1);
+  assert.equal(envViolations({ APP_ENV: "production", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co` } as any).length, 1);
+  assert.equal(envViolations({ APP_ENV: "prod" } as any).length, 1);
+});
