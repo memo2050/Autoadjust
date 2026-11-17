@@ -13,7 +13,7 @@ async function harness(env: Record<string, string>) {
   const store = new TestStore(), srv = createServer(async (rq, rs) => { const chunks: Buffer[] = []; for await (const c of rq) chunks.push(c as Buffer); const body = Buffer.concat(chunks);
     if (!rq.url!.startsWith("/api/soc/")) { rs.writeHead(200, { "x-content-type-options": "nosniff" }); return rs.end("ok"); }
     const p = rq.url!.slice(9).split("?")[0]; const r = await handleSoc(new Request("http://localhost" + rq.url, { method: rq.method, headers: rq.headers as any, body: ["GET", "HEAD"].includes(rq.method!) ? undefined : body }), p.split("/"), { store, model: null, env } as any);
-    rs.writeHead(r.status, Object.fromEntries(r.headers)); rs.end(Buffer.from(await r.arrayBuffer())); });
+    const hd: Record<string, string> = {}; r.headers.forEach((v: string, k: string) => { hd[k] = v; }); rs.writeHead(r.status, hd); rs.end(Buffer.from(await r.arrayBuffer())); });
   await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok)); return { srv, url: `http://127.0.0.1:${(srv.address() as any).port}` };
 }
 const smoke = (url: string, env: Record<string, string>) => new Promise<{ code: number; out: string }>((res) => { const { spawn } = require("node:child_process"); const c = spawn("node", ["scripts/staging-smoke.mjs"], { env: { PATH: process.env.PATH, STAGING_URL: url, ...env } }); let out = ""; c.stdout.on("data", (d: Buffer) => (out += d)); c.stderr.on("data", (d: Buffer) => (out += d)); c.on("close", (code: number) => res({ code, out })); });
