@@ -1,0 +1,23 @@
+name: security
+# Runs on every pull request. No secrets, no deploy, no database. A failure blocks the pull request (mark this check as required in branch protection).
+on:
+  workflow_dispatch:
+  pull_request:
+  push: { branches: [main] }
+permissions: { contents: read }
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20.19.0" }
+      - name: Secrets scan (tracked files)
+        run: node scripts/secrets-scan.mjs
+      - name: Install from lockfile (scripts disabled)
+        run: npm ci --ignore-scripts
+      - name: Dependency audit (production dependencies; fails on high or critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Environment guard unit tests
+        run: npx tsx --test tests/env-guard.test.ts
