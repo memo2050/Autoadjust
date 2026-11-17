@@ -7,7 +7,7 @@
 set -euo pipefail; cd "$(dirname "$0")/.."
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 for c in gh psql node curl openssl; do command -v $c >/dev/null || { echo "missing tool: $c"; exit 2; }; done
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"; echo "Repository: $REPO"
+REPO="$(git config --get remote.origin.url | sed -E 's#^(https://|git@)github.com[:/]##; s#\.git$##; s#^.*@github.com/##')"; case "$REPO" in */*) ;; *) REPO="memo2050/Autoadjust";; esac; echo "Repository: $REPO"
 ask()  { local v; read -r -p "$1: " v; printf '%s' "$v"; }
 asks() { local v; read -r -s -p "$1 (hidden): " v; echo >&2; printf '%s' "$v"; }
 STG_REF="$(ask 'STAGING Supabase project ref (the part before .supabase.co)')"; PRD_REF="$(ask 'PRODUCTION Supabase project ref')"
@@ -18,8 +18,9 @@ node scripts/env-guard.mjs || { echo "Guard refused. Nothing was changed."; exit
 SB_URL="https://$STG_REF.supabase.co"; ANON="$(asks 'STAGING anon (public) key')"; SERVICE="$(asks 'STAGING service_role key')"
 STAGING_URL="$(ask 'Staging site URL (e.g. https://staging.autoadjust.net)')"; case "$STAGING_URL" in https://*staging*) ;; *) echo "STAGING_URL must be https and contain 'staging'"; exit 1;; esac
 ME="$(gh api user -q .login)"; UID_="$(gh api user -q .id)"
-gh api -X PUT "repos/$REPO/environments/staging" --silent
-gh api -X PUT "repos/$REPO/environments/production" --input - --silent <<<"{\"reviewers\":[{\"type\":\"User\",\"id\":$UID_}]}"
+# Existing environments are left exactly as they are (a PUT would overwrite their protection rules); only a missing one is created.
+gh api "repos/$REPO/environments/staging" --silent 2>/dev/null && echo "environment staging: exists, not modified" || { gh api -X PUT "repos/$REPO/environments/staging" --silent; echo "environment staging: created"; }
+gh api "repos/$REPO/environments/production" --silent 2>/dev/null && echo "environment production: exists, not modified" || { gh api -X PUT "repos/$REPO/environments/production" --input - --silent <<<"{\"reviewers\":[{\"type\":\"User\",\"id\":$UID_}]}"; echo "environment production: created with you as required reviewer"; }
 gh variable set PRODUCTION_PROJECT_REF --body "$PRD_REF"
 for kv in "STAGING_URL=$STAGING_URL" "STAGING_SUPABASE_URL=$SB_URL" "EXPECTED_PROJECT_REF=$STG_REF"; do gh variable set "${kv%%=*}" --env staging --body "${kv#*=}"; done
 printf '%s' "$DATABASE_URL" | gh secret set DATABASE_URL --env staging; printf '%s' "$ANON" | gh secret set STAGING_SUPABASE_ANON_KEY --env staging
