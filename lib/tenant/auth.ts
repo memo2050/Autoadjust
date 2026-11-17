@@ -4,7 +4,7 @@
 //     Supabase Auth /auth/v1/user), then membership and role are read from public.org_members FROM THE DATABASE on every request: never from the token.
 //  2. Collectors (Windows/Wazuh/Zabbix bridges) use per-organization API keys (aa_live_...), stored only as SHA-256 hashes in public.org_api_keys.
 //  3. Legacy shared tokens (SOC_ADMIN_TOKEN etc.) still work ONLY for the Default organization, and can be switched off with SOC_LEGACY_TOKENS=off.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, createPublicKey, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
 import type { Store } from "../soc/store";
 import { safeEqual, sha256 } from "../soc/util";
 import { UUID_RE } from "./scoped-store";
@@ -48,9 +48,59 @@ export function verifyJwtHs256(token: string, secret: string, now = Date.now()):
   } catch { return null; }
 }
 
-async function userFromToken(token: string, f: typeof fetch): Promise<{ id: string; email?: string; activeOrg?: string; aal?: string } | null> {
-  const secret = process.env.SUPABASE_JWT_SECRET;
-  if (secret) { const c = verifyJwtHs256(token, secret); return c ? { id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org, aal: typeof c.aal === "string" ? c.aal : undefined } : null; }
+/** Claims every accepted Supabase user token must satisfy, whatever the signature algorithm. */
+function claimsOk(c: any, now: number, issuer?: string): boolean {
+  if (!c || typeof c.exp !== "number" || c.exp * 1000 <= now) return false;
+  if (typeof c.nbf === "number" && c.nbf * 1000 > now + 60_000) return false;
+  if (c.aud !== undefined && c.aud !== "authenticated") return false;
+  if (issuer && c.iss !== issuer) return false;                         // token must come from THIS project's auth server
+  return c.role === "authenticated" && typeof c.sub === "string" && UUID_RE.test(c.sub);
+}
+const issuerOf = (env: NodeJS.ProcessEnv) => (env.SUPABASE_URL ? `${env.SUPABASE_URL.replace(/\/$/, "")}/auth/v1` : undefined);
+
+type Jwk = { kty: string; kid?: string; alg?: string; use?: string; [k: string]: unknown };
+const jwksCache = new Map<string, { keys: Jwk[]; at: number; lastMiss: number }>();
+export const _resetJwksCache = () => jwksCache.clear();
+async function getJwks(url: string, f: typeof fetch, kid: string | undefined, now: number): Promise<Jwk[]> {
+  const c = jwksCache.get(url), fresh = c && now - c.at < 600_000, known = c && (!kid || c.keys.some((k) => k.kid === kid));
+  if (c && fresh && known) return c.keys;
+  if (c && fresh && now - c.lastMiss < 30_000) return c.keys;           // unknown kid: refetch at most every 30 s (no amplification by forged kids)
+  const r = await f(url, { headers: { accept: "application/json" } }).catch(() => null);
+  if (!r || !r.ok) return c?.keys ?? [];
+  const j: any = await r.json().catch(() => null), keys: Jwk[] = Array.isArray(j?.keys) ? j.keys.filter((k: any) => k && typeof k.kty === "string") : [];
+  jwksCache.set(url, { keys, at: now, lastMiss: now });
+  return keys;
+}
+/** Verify an asymmetric (ES256 / RS256) Supabase JWT against the project's published JWKS. Returns claims or null. */
+export async function verifyJwtAsym(token: string, jwksUrl: string, issuer: string, f: typeof fetch = fetch, now = Date.now()): Promise<Record<string, any> | null> {
+  const p = token.split("."); if (p.length !== 3) return null;
+  try {
+    const head = JSON.parse(b64u(p[0]).toString());
+    if (head.alg !== "ES256" && head.alg !== "RS256") return null;
+    const key = (await getJwks(jwksUrl, f, head.kid, now)).find((k) => (head.kid ? k.kid === head.kid : true) && (!k.alg || k.alg === head.alg) && (head.alg === "ES256" ? k.kty === "EC" : k.kty === "RSA"));
+    if (!key) return null;
+    const pub = createPublicKey({ key: key as any, format: "jwk" });
+    const ok = cryptoVerify("sha256", Buffer.from(p[0] + "." + p[1]), head.alg === "ES256" ? { key: pub, dsaEncoding: "ieee-p1363" } : pub, b64u(p[2]));
+    if (!ok) return null;
+    const c = JSON.parse(b64u(p[1]).toString());
+    return claimsOk(c, now, issuer) ? c : null;
+  } catch { return null; }
+}
+
+type TokenUser = { id: string; email?: string; activeOrg?: string; aal?: string };
+const toUser = (c: any): TokenUser => ({ id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org, aal: typeof c.aal === "string" ? c.aal : undefined });
+
+async function userFromToken(token: string, f: typeof fetch): Promise<TokenUser | null> {
+  const secret = process.env.SUPABASE_JWT_SECRET, issuer = issuerOf(process.env);
+  let alg = ""; try { alg = JSON.parse(b64u(token.split(".")[0]).toString()).alg; } catch { return null; }
+  // Asymmetric signing keys (current Supabase default): verify locally against the project's JWKS. Needs SUPABASE_URL (it also fixes the expected issuer).
+  if (alg === "ES256" || alg === "RS256") {
+    if (!issuer) return null;
+    const c = await verifyJwtAsym(token, `${issuer}/.well-known/jwks.json`, issuer, f);
+    return c ? toUser(c) : null;
+  }
+  if (alg !== "HS256") return null;
+  if (secret) { const c = verifyJwtHs256(token, secret); return c && (!issuer || c.iss === issuer) ? toUser(c) : null; }
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const r = await f(`${url.replace(/\/$/, "")}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
