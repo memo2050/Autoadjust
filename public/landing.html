@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><script src="/gate.js"></script>
+<head><script src="/demo.js"></script><script src="/gate.js"></script>
 <meta charset="utf-8"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#050608">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Autoadjust — AI SOC, NOC and intelligent security and network agents</title>
@@ -296,10 +296,10 @@ nav.nv{grid-template-columns:auto 1fr auto}nav.nv .nr,nav.nv .nr a{white-space:n
 #noc .tptiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}#noc .tpt2{border:1px solid color-mix(in srgb,var(--c) 45%,#1b2233);border-radius:14px;padding:12px;background:rgba(255,255,255,.02);box-shadow:0 0 22px color-mix(in srgb,var(--c) 12%,transparent)}
 #noc .tpt2 b{display:block;font-size:28px;color:var(--c)}#noc .tpt2 span{font-size:12.5px;color:#9aa3b5}#noc .tptiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}#noc .tptiers div{border:1px solid var(--nbd);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;font-size:13px}
 #noc .tpbig{padding:26px;font-size:14.5px;line-height:1.55}
-</style></head>
+</style><style id="navcta-css">#navCta{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}#navCta .btn{white-space:nowrap}#navCta #liveDemo{background:#4d8dff;color:#fff;border-color:#4d8dff}@media(max-width:700px){#navCta{gap:6px}#navCta .btn{padding:7px 10px;font-size:12px}nav.nv .logo{font-size:18px}}</style></head>
 <body data-view="home"><script id="router-early">(function(){var h=(location.hash||"").replace(/^#\/?/,""),p=(location.pathname||"").replace(/\/+$/,"").split("/").pop(),v=h==="soc"||h==="doc"?"soc":h==="noc"?"noc":h==="home"||h==="top"?"home":h?"home":p==="soc"?"soc":p==="noc"?"noc":"home";document.body.setAttribute("data-view",v)})();</script>
 <div class="w">
-<nav class="nv" id="top"><a class="logo" href="#/home">Auto Adjust<span>.</span></a><div class="nl"><a class="l" data-nav="home" href="#/home">Home Page</a><a class="l" data-nav="soc" href="#/soc">SOC AI Agents</a><a class="l" data-nav="noc" href="#/noc">NOC AI Agents</a><a class="l" href="#contact">Contact us</a></div><div class="nr"><a class="btn" href="#/soc">Open SOC</a></div></nav>
+<nav class="nv" id="top"><a class="logo" href="#/home">Auto Adjust<span>.</span></a><div class="nl"><a class="l" data-nav="home" href="#/home">Home Page</a><a class="l" data-nav="soc" href="#/soc">SOC AI Agents</a><a class="l" data-nav="noc" href="#/noc">NOC AI Agents</a><a class="l" href="#contact">Contact us</a></div><div class="nr" id="navCta"><a class="btn" id="liveDemo" href="/demo">Live Demo</a><a class="btn" href="/account.html">Sign In</a><a class="btn" href="/account.html">Create Account</a><a class="btn" href="/demo?request=1">Request a Demo</a></div></nav>
 
 <header class="hero" data-page="home">
 <div class="tag">🛡️ AI-powered security and network operations</div>
