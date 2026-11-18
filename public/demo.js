@@ -10,7 +10,6 @@
   window.__AA_DEMO__ = true;
   var blocked = [];
   window.__AA_DEMO_BLOCKED__ = blocked;
-  try { localStorage.removeItem("socToken"); } catch (e) {}
 
   /* ---------- fetch shim ---------- */
   var realFetch = window.fetch ? window.fetch.bind(window) : null;
