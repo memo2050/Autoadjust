@@ -5,14 +5,14 @@
 (function () {
   "use strict";
   if (/^\/demo\/?$/.test(location.pathname)) return; // exact /demo only
-  var KEYS = ["socToken", "aaSession"], ok = false, pending = null, bypass = false;
+  var KEYS = ["socToken", "aaSession"], ok = false, pending = null, bypass = false, needOrg = false;
   var st = document.createElement("style");
   st.textContent = 'html:not(.aa-ok) body[data-view="soc"] [data-page="soc"],html:not(.aa-ok) body[data-view="noc"] [data-page="noc"],html:not(.aa-ok) #socws{display:none!important}';
   document.head.appendChild(st);
   function tok() { try { return sessionStorage.getItem("socToken") || ""; } catch (e) { return ""; } }
   function clear() { KEYS.forEach(function (k) { try { sessionStorage.removeItem(k); } catch (e) {} }); }
   function setOk(v) { ok = v; document.documentElement.classList.toggle("aa-ok", v); var b = document.getElementById("aaSignout"); if (b) b.style.display = v ? "" : "none"; }
-  function toLogin() { location.replace("/account.html?next=" + encodeURIComponent(location.pathname + (location.hash || "#/soc"))); }
+  function toLogin() { location.replace("/account.html?" + (needOrg ? "need=org&" : "") + "next=" + encodeURIComponent(location.pathname + (location.hash || "#/soc"))); }
   function authed() {
     var t = tok(); if (!t) return Promise.resolve(false);
     if (pending) return pending;
@@ -20,7 +20,9 @@
     pending = fetch("/api/soc/me", { headers: { Authorization: "Bearer " + t }, cache: "no-store" }).then(function (r) {
       var ct = r.headers.get("content-type") || "";
       if (r.ok && ct.indexOf("json") >= 0) return true;
-      if (r.status === 401 || r.status === 403) clear();
+      // 401 = the server rejected the token: sign-in is invalid, forget it.
+      // 403/409 = the token is VALID but the user has no organization (or must choose one): keep the session and send them to the account page to fix that.
+      if (r.status === 401) clear(); else if (r.status === 403 || r.status === 409) needOrg = true;
       return false;
     }).catch(function () { return false; }).then(function (v) { pending = null; window.__aaChecking = false; setOk(v); return v; });
     return pending;

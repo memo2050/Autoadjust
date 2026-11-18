@@ -534,7 +534,7 @@ async function probe() {
   N.err = "";
   try { await api("GET", "/me"); N.probe = "ok"; try { var ov0 = await api("GET", "/noc/overview"); if (ov0.sources.length || ov0.devices.length) { setReal(ov0); return finishProbe(); } } catch (e0) { if (e0.status === 401 || e0.nobackend) throw e0; }
     var rows = await api("GET", "/noc/devices"); if (rows.length) { N.mode = "live"; N.devices = normLive(rows); N.live = Date.now(); } else { N.mode = "sample"; N.probe = "empty"; initSample(); } }
-  catch (e) { N.probe = e.nobackend || !e.status ? "none" : e.status === 401 ? "auth" : "error"; N.err = e.message; if (!/^\/demo\/?$/.test(location.pathname)) { try { ["socToken", "aaSession"].forEach(function (k) { sessionStorage.removeItem(k); }); } catch (x) {} location.replace("/account.html?next=" + encodeURIComponent("/#/noc")); return; } N.mode = "sample"; initSample(); }
+  catch (e) { N.probe = e.nobackend || !e.status ? "none" : e.status === 401 ? "auth" : "error"; N.err = e.message; if (!/^\/demo\/?$/.test(location.pathname)) { var nw = e.status === 403 || e.status === 409; if (!nw) { try { ["socToken", "aaSession"].forEach(function (k) { sessionStorage.removeItem(k); }); } catch (x) {} } location.replace("/account.html?" + (nw ? "need=org&" : "") + "next=" + encodeURIComponent("/#/noc")); return; } N.mode = "sample"; initSample(); }
   return finishProbe();
 }
 async function finishProbe() {
@@ -1675,7 +1675,7 @@ async function load(){
    else{S.mode="connected";setMode("CONNECTED · NO DATA","b-imported");bn+=banner("info","<b>Connected to your SOC backend, but it holds no data yet.</b> Connect the Windows collector and import a Greenbone report (see below). "+'Want to explore the dashboard first? <button type="button" class="mini" id="demo-view">Preview with SAMPLE data</button> <small>(shown in your browser only, nothing is stored)</small>')}
   }catch(e){showSample();bn+=banner("bad","<b>Could not read the SOC backend:</b> "+esc(e.message||"error")+". Showing SAMPLE data instead.")}
  }else if(!/^\/demo\/?$/.test(location.pathname)){
-  try{["socToken","aaSession"].forEach(function(k){sessionStorage.removeItem(k)})}catch(e){}location.replace("/account.html?next="+encodeURIComponent("/#/soc"));return
+  var nw=S.err&&(S.err.status===403||S.err.status===409);if(!nw)try{["socToken","aaSession"].forEach(function(k){sessionStorage.removeItem(k)})}catch(e){}location.replace("/account.html?"+(nw?"need=org&":"")+"next="+encodeURIComponent("/#/soc"));return
  }else{
   showSample();
   if(S.probe==="auth")bn+=banner("sample","<b>You are looking at SAMPLE data.</b> A SOC backend exists on this site but needs a sign-in. Enter an API token to see your real data.<form id=\"tokform\"><label class=\"sub\" for=\"tokin\" style=\"margin:0;align-self:center\">API token</label><input type=\"password\" id=\"tokin\" autocomplete=\"off\" placeholder=\"socs_… or admin token\" style=\"flex:1 1 220px\"><button type=\"submit\" class=\"xbtn\">Connect</button></form>"+(S.err&&S.err.message&&tok()?"<br><small>"+esc(S.err.message)+"</small>":""));
