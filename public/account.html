@@ -59,13 +59,14 @@ async function api(method,path,body){var h={authorization:"Bearer "+S.ses.access
 async function refresh(){if(!S.ses||!S.ses.refresh_token)return;try{S.ses=await gt("token?grant_type=refresh_token",{refresh_token:S.ses.refresh_token});save()}catch(e){S.ses=null;try{sessionStorage.removeItem("aaSession")}catch(x){}}}
 async function enter(){
   if(!S.ses){$("auth").classList.remove("hide");$("app").classList.add("hide");return}
-  var nx=new URLSearchParams(location.search).get("next");
-  if(nx&&/^\/(?![\/\\])[^\r\n]*$/.test(nx)){location.replace(nx);return}
     $("auth").classList.add("hide");$("app").classList.remove("hide");$("who").textContent=(S.ses.user&&S.ses.user.email)||"Signed in";
   var m=await api("GET","org/mine");S.orgs=m.organizations;
   var pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org;
   S.cur=(S.orgs.find(function(o){return o.id===S.cur})||S.orgs.find(function(o){return o.id===pref})||S.orgs[0]||{}).id||null;
   paintOrgs();await paintAdmin();await paintMfa();await paintData();
+  // Go back to the page that asked for sign-in ONLY once the user has an organization; otherwise stay here so they can create or join one.
+  var q=new URLSearchParams(location.search),nx=q.get("next");
+  if(S.cur&&nx&&/^\/(?![\/\\])[^\r\n]*$/.test(nx)){location.replace(nx);return}
 }
 function paintOrgs(){
   var box=$("orgs");box.textContent="";if(!S.orgs.length){box.appendChild(el("p",{class:"mut",text:"You are not in an organization yet. Create one below or join with an invitation."}));$("orgline").textContent="";return}
