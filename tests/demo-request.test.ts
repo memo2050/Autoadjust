@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { parseDemoRequest } from "../lib/demo/request";
+const ok = parseDemoRequest({ name: " Ann ", email: "A@Example.com", company: "X", message: "hi" });
+assert.ok(ok.ok && ok.value.name === "Ann" && ok.value.email === "a@example.com");
+assert.equal(parseDemoRequest({ name: "", email: "a@b.co" }).ok, false);
+assert.equal(parseDemoRequest({ name: "A", email: "nope" }).ok, false);
+assert.equal(parseDemoRequest({ name: "A", email: "a@b.co", website: "http://spam" }).ok, false);
+assert.equal(parseDemoRequest(null).ok, false);
+const long = parseDemoRequest({ name: "A".repeat(500), email: "a@b.co", message: "m".repeat(9000) });
+assert.ok(long.ok && long.value.name.length === 120 && long.value.message.length === 2000);
+console.log("demo-request tests passed");
