@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseDemoRequest } from "../lib/demo/request";
+import { parseDemoRequest, storeBlockReason, makeLimiter } from "../lib/demo/request";
 const ok = parseDemoRequest({ name: " Ann ", email: "A@Example.com", company: "X", message: "hi" });
 assert.ok(ok.ok && ok.value.name === "Ann" && ok.value.email === "a@example.com");
 assert.equal(parseDemoRequest({ name: "", email: "a@b.co" }).ok, false);
@@ -9,3 +9,16 @@ assert.equal(parseDemoRequest(null).ok, false);
 const long = parseDemoRequest({ name: "A".repeat(500), email: "a@b.co", message: "m".repeat(9000) });
 assert.ok(long.ok && long.value.name.length === 120 && long.value.message.length === 2000);
 console.log("demo-request tests passed");
+
+const S = "abcdefghijklmnopqrst", P = "zyxwvutsrqponmlkjihg", key = "x";
+const env = (o: object) => ({ SUPABASE_SERVICE_ROLE_KEY: key, ...o }) as any;
+assert.equal(storeBlockReason(env({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co` })), null, "staging project allowed");
+assert.ok(storeBlockReason(env({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co` })), "staging -> production project refused");
+assert.ok(storeBlockReason(env({ APP_ENV: "", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co` })), "unset APP_ENV -> production project refused");
+assert.ok(storeBlockReason(env({ APP_ENV: "prod", SUPABASE_URL: `https://${S}.supabase.co` })), "bad APP_ENV refused");
+assert.ok(storeBlockReason({ APP_ENV: "staging", SUPABASE_URL: `https://${S}.supabase.co` } as any), "missing service key refused");
+assert.ok(storeBlockReason(env({ APP_ENV: "staging" })), "missing url refused");
+assert.ok(!JSON.stringify(storeBlockReason(env({ APP_ENV: "staging", SUPABASE_URL: `https://${P}.supabase.co`, PRODUCTION_PROJECT_REF: P }))).includes(key + "x"), "no secrets in reason");
+let t = 0; const lim = makeLimiter(2, 3, 1000, () => t);
+assert.ok(lim("a") && lim("a") && !lim("a"), "per-key limit"); assert.ok(lim("b") && !lim("c"), "global limit"); t = 1001; assert.ok(lim("a"), "window resets");
+console.log("demo-request hardening tests passed");

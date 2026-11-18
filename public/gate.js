@@ -4,7 +4,7 @@
    The simulated public demo lives at /demo and is exempt (it has no backend and uses only built-in sample data). */
 (function () {
   "use strict";
-  if (window.__AA_DEMO__ || /^\/demo\/?$/.test(location.pathname)) return;
+  if (/^\/demo\/?$/.test(location.pathname)) return; // exact /demo only
   var KEYS = ["socToken", "aaSession"], ok = false, pending = null, bypass = false;
   var st = document.createElement("style");
   st.textContent = 'html:not(.aa-ok) body[data-view="soc"] [data-page="soc"],html:not(.aa-ok) body[data-view="noc"] [data-page="noc"],html:not(.aa-ok) #socws{display:none!important}';
@@ -16,12 +16,13 @@
   function authed() {
     var t = tok(); if (!t) return Promise.resolve(false);
     if (pending) return pending;
+    window.__aaChecking = true;
     pending = fetch("/api/soc/me", { headers: { Authorization: "Bearer " + t }, cache: "no-store" }).then(function (r) {
       var ct = r.headers.get("content-type") || "";
       if (r.ok && ct.indexOf("json") >= 0) return true;
       if (r.status === 401 || r.status === 403) clear();
       return false;
-    }).catch(function () { return false; }).then(function (v) { pending = null; setOk(v); return v; });
+    }).catch(function () { return false; }).then(function (v) { pending = null; window.__aaChecking = false; setOk(v); return v; });
     return pending;
   }
   function view() { return document.body && document.body.getAttribute("data-view"); }

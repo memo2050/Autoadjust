@@ -1,22 +1,25 @@
-import { parseDemoRequest } from "../../../lib/demo/request";
+import { parseDemoRequest, storeBlockReason, makeLimiter } from "../../../lib/demo/request";
 
-// Public endpoint: stores a "Request a Demo" form. Writes only to public.demo_requests with the server-side service key; the browser never sees a key.
-const hits = new Map<string, { t: number; n: number }>();
+// Public endpoint: stores a "Request a Demo" form in public.demo_requests.
+// Everything is enforced HERE on the server: same-origin check, size cap, validation + honeypot, per-IP and global rate limits,
+// environment-isolation guard, and the service-role key (server env only; never sent to the browser, never in a response or log).
+export const dynamic = "force-dynamic";
+const allow = makeLimiter(5, 200, 3600_000);
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
 
 export async function POST(req: Request) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anon";
-  const now = Date.now(), h = hits.get(ip);
-  const n = h && now - h.t < 3600_000 ? h.n : 0;
-  if (n >= 5) return json({ error: "Too many requests. Please try again later." }, 429);
-  hits.set(ip, { t: h && now - h.t < 3600_000 ? h.t : now, n: n + 1 });
-  if (hits.size > 5000) hits.clear();
-  let body: unknown;
-  try { body = await req.json(); } catch { return json({ error: "Invalid request." }, 400); }
+  const origin = req.headers.get("origin"), host = req.headers.get("host");
+  if (origin) { let ok = false; try { ok = !!host && new URL(origin).host === host; } catch {} if (!ok) return json({ error: "Forbidden." }, 403); }
+  if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return json({ error: "Invalid request." }, 415);
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
+  if (!allow(ip)) return json({ error: "Too many requests. Please try again later." }, 429);
+  let text = ""; try { text = await req.text(); } catch { return json({ error: "Invalid request." }, 400); }
+  if (text.length > 8192) return json({ error: "Request too large." }, 413);
+  let body: unknown; try { body = JSON.parse(text); } catch { return json({ error: "Invalid request." }, 400); }
   const p = parseDemoRequest(body);
   if (!p.ok) return json({ error: p.error }, 400);
-  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return json({ error: "Demo requests are not enabled on this site yet." }, 503);
+  if (storeBlockReason(process.env)) return json({ error: "Demo requests are not enabled on this site yet." }, 503);
+  const url = process.env.SUPABASE_URL!, key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   try {
     const r = await fetch(url.replace(/\/$/, "") + "/rest/v1/demo_requests", {
       method: "POST",

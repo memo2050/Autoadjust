@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><script src="/demo.js"></script><script src="/gate.js"></script>
+<head><style id="aa-failclosed">html:not(.aa-ok):not(.aa-demo) body[data-view="soc"] [data-page="soc"],html:not(.aa-ok):not(.aa-demo) body[data-view="noc"] [data-page="noc"],html:not(.aa-ok):not(.aa-demo) #socws{display:none!important}</style><script id="aa-failclosed-js">(function(){var d=document.documentElement;if(/^\/demo\/?$/.test(location.pathname))d.classList.add("aa-demo");setTimeout(function(){var v=document.body&&document.body.getAttribute("data-view");if((v==="soc"||v==="noc")&&!d.classList.contains("aa-ok")&&!d.classList.contains("aa-demo")&&!window.__aaChecking)location.replace("/account.html?next="+encodeURIComponent(location.pathname+(location.hash||"#/soc")))},4000)})();</script><script src="/demo.js"></script><script src="/gate.js"></script>
 <meta charset="utf-8"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#050608">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Autoadjust — AI SOC, NOC and intelligent security and network agents</title>
@@ -534,7 +534,7 @@ async function probe() {
   N.err = "";
   try { await api("GET", "/me"); N.probe = "ok"; try { var ov0 = await api("GET", "/noc/overview"); if (ov0.sources.length || ov0.devices.length) { setReal(ov0); return finishProbe(); } } catch (e0) { if (e0.status === 401 || e0.nobackend) throw e0; }
     var rows = await api("GET", "/noc/devices"); if (rows.length) { N.mode = "live"; N.devices = normLive(rows); N.live = Date.now(); } else { N.mode = "sample"; N.probe = "empty"; initSample(); } }
-  catch (e) { N.probe = e.nobackend || !e.status ? "none" : e.status === 401 ? "auth" : "error"; N.err = e.message; if (!window.__AA_DEMO__ && !/^\/demo\/?$/.test(location.pathname)) { try { ["socToken", "aaSession"].forEach(function (k) { sessionStorage.removeItem(k); }); } catch (x) {} location.replace("/account.html?next=" + encodeURIComponent("/#/noc")); return; } N.mode = "sample"; initSample(); }
+  catch (e) { N.probe = e.nobackend || !e.status ? "none" : e.status === 401 ? "auth" : "error"; N.err = e.message; if (!/^\/demo\/?$/.test(location.pathname)) { try { ["socToken", "aaSession"].forEach(function (k) { sessionStorage.removeItem(k); }); } catch (x) {} location.replace("/account.html?next=" + encodeURIComponent("/#/noc")); return; } N.mode = "sample"; initSample(); }
   return finishProbe();
 }
 async function finishProbe() {
@@ -1674,7 +1674,7 @@ async function load(){
    else if(demo){S.mode="connected";setMode("SAMPLE DATA","b-demo");bn+=banner("sample","<b>Connected, but only sample data is present.</b> No real events or scan results have arrived yet. "+" See <i>How to connect real data sources</i> below.")}
    else{S.mode="connected";setMode("CONNECTED · NO DATA","b-imported");bn+=banner("info","<b>Connected to your SOC backend, but it holds no data yet.</b> Connect the Windows collector and import a Greenbone report (see below). "+'Want to explore the dashboard first? <button type="button" class="mini" id="demo-view">Preview with SAMPLE data</button> <small>(shown in your browser only, nothing is stored)</small>')}
   }catch(e){showSample();bn+=banner("bad","<b>Could not read the SOC backend:</b> "+esc(e.message||"error")+". Showing SAMPLE data instead.")}
- }else if(!window.__AA_DEMO__&&!/^\/demo\/?$/.test(location.pathname)){
+ }else if(!/^\/demo\/?$/.test(location.pathname)){
   try{["socToken","aaSession"].forEach(function(k){sessionStorage.removeItem(k)})}catch(e){}location.replace("/account.html?next="+encodeURIComponent("/#/soc"));return
  }else{
   showSample();

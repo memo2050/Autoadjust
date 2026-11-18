@@ -11,3 +11,29 @@ export function parseDemoRequest(b: unknown): { ok: true; value: DemoRequest } |
   if (!EMAIL.test(email)) return { ok: false, error: "Please enter a valid email address." };
   return { ok: true, value: { name, email, company, message } };
 }
+
+import { envViolations } from "../tenant/env-isolation";
+/** Fail-closed environment check for the demo-request writer. Returns a reason (never a secret) when this server must NOT write, else null.
+ *  Refuses when the runtime isolation guard reports a violation, when the Supabase URL is the production project but this is not production,
+ *  and when SUPABASE_URL / the service key are missing. */
+export function storeBlockReason(env: NodeJS.ProcessEnv): string | null {
+  const v = envViolations(env);
+  if (v.length) return "environment isolation check failed";
+  const ref = /^https:\/\/([a-z0-9]{15,30})\.supabase\.co/i.exec(env.SUPABASE_URL ?? "")?.[1]?.toLowerCase();
+  const prod = (env.PRODUCTION_PROJECT_REF ?? "").toLowerCase();
+  if (prod && ref === prod && (env.APP_ENV ?? "").toLowerCase() !== "production") return "refusing to write to the production project from a non-production app";
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return "not configured";
+  return null;
+}
+
+/** Fixed-window limiter: `perKey` hits per key and `total` hits overall per window. In memory (per server instance). */
+export function makeLimiter(perKey: number, total: number, windowMs: number, now: () => number = Date.now) {
+  let start = now(), all = 0; const m = new Map<string, number>();
+  return (key: string): boolean => {
+    const t = now(); if (t - start >= windowMs) { start = t; all = 0; m.clear(); }
+    const n = m.get(key) ?? 0;
+    if (n >= perKey || all >= total) return false;
+    if (m.size > 5000) m.clear();
+    m.set(key, n + 1); all++; return true;
+  };
+}

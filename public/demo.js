@@ -1,11 +1,11 @@
-/* Auto Adjust public demo layer. Active ONLY on /demo (or ?demo=1). Nothing here talks to a backend:
+/* Auto Adjust public demo layer. Active ONLY on /demo . Nothing here talks to a backend:
    - fetch() to /api/soc/* is answered locally with a non-JSON 404 so the page's built-in SAMPLE modes activate.
    - fetch() to /api/analyze is answered by the scripted, clearly-labelled SIMULATED responder below (no real AI call, no quota, no keys).
    - the only network call allowed out is POST /api/demo-request (the Request a Demo form). Every other /api/* call is blocked.
    All data on screen is simulated. */
 (function () {
   "use strict";
-  var on = /^\/demo\/?$/.test(location.pathname) || /[?&]demo=1\b/.test(location.search);
+  var on = /^\/demo\/?$/.test(location.pathname); // exact /demo route only: no query-string or hash switch
   if (!on) return;
   window.__AA_DEMO__ = true;
   var blocked = [];
