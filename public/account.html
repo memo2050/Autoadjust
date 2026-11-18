@@ -59,7 +59,9 @@ async function api(method,path,body){var h={authorization:"Bearer "+S.ses.access
 async function refresh(){if(!S.ses||!S.ses.refresh_token)return;try{S.ses=await gt("token?grant_type=refresh_token",{refresh_token:S.ses.refresh_token});save()}catch(e){S.ses=null;try{sessionStorage.removeItem("aaSession")}catch(x){}}}
 async function enter(){
   if(!S.ses){$("auth").classList.remove("hide");$("app").classList.add("hide");return}
-  $("auth").classList.add("hide");$("app").classList.remove("hide");$("who").textContent=(S.ses.user&&S.ses.user.email)||"Signed in";
+  var nx=new URLSearchParams(location.search).get("next");
+  if(nx&&/^\/(?![\/\\])[^\r\n]*$/.test(nx)){location.replace(nx);return}
+    $("auth").classList.add("hide");$("app").classList.remove("hide");$("who").textContent=(S.ses.user&&S.ses.user.email)||"Signed in";
   var m=await api("GET","org/mine");S.orgs=m.organizations;
   var pref=S.ses.user&&S.ses.user.user_metadata&&S.ses.user.user_metadata.active_org;
   S.cur=(S.orgs.find(function(o){return o.id===S.cur})||S.orgs.find(function(o){return o.id===pref})||S.orgs[0]||{}).id||null;
@@ -84,7 +86,7 @@ async function paintAdmin(){
 }
 $("authform").onsubmit=async function(ev){ev.preventDefault();say("authmsg","Signing in…");try{S.ses=await gt("token?grant_type=password",{email:$("em").value.trim(),password:$("pw").value});save();say("authmsg","");await enter()}catch(e){say("authmsg",e.message,"err")}};
 $("signup").onclick=async function(){say("authmsg","Creating account…");try{var r=await gt("signup",{email:$("em").value.trim(),password:$("pw").value});if(r.access_token){S.ses=r;save();await enter()}else say("authmsg","Check your email to confirm your account, then sign in.","good")}catch(e){say("authmsg",e.message,"err")}};
-$("out").onclick=function(){try{sessionStorage.removeItem("aaSession");sessionStorage.removeItem("socToken")}catch(e){}S.ses=null;enter()};
+$("out").onclick=function(){try{var t0=S.ses&&S.ses.access_token;if(t0&&S.cfg)gt("logout",{_m:"POST",_b:{}},t0).catch(function(){})}catch(x){}try{sessionStorage.removeItem("aaSession");sessionStorage.removeItem("socToken")}catch(e){}S.ses=null;enter()};
 $("neworg").onsubmit=async function(ev){ev.preventDefault();say("orgmsg","Creating…");try{var b={name:$("onm").value.trim()};if($("osl").value.trim())b.slug=$("osl").value.trim();var o=await api("POST","org/create",b);S.cur=o.id;say("orgmsg","Created.","good");$("neworg").reset();await useOrg(o.id)}catch(e){say("orgmsg",e.message,"err")}};
 $("acc").onsubmit=async function(ev){ev.preventDefault();say("accmsg","Joining…");try{var r=await api("POST","org/invitations/accept",{token:$("itok").value.trim()});say("accmsg","Joined "+r.organization.name+".","good");$("acc").reset();await useOrg(r.organization.id)}catch(e){say("accmsg",e.message,"err")}};
 $("invf").onsubmit=async function(ev){ev.preventDefault();say("invmsg","Creating…");try{var r=await api("POST","org/invitations",{email:$("iem").value.trim(),role:$("irole").value});$("invmsg").textContent="";$("invmsg").className="msg good";$("invmsg").appendChild(document.createTextNode("Send this token to "+r.email+" over a secure channel (shown once): "));$("invmsg").appendChild(el("code",{text:r.token}));$("invf").reset();paintAdmin()}catch(e){say("invmsg",e.message,"err")}};
