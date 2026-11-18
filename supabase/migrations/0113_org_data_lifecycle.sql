@@ -1,6 +1,11 @@
 -- 0113 | Customer data lifecycle: deletion requests (14-day hold + platform approval), tombstones, and an atomic hard-delete function. Additive.
 -- DO NOT APPLY TO PRODUCTION without explicit owner approval. Staging / scratch only.
 begin;
+do $$ begin
+  if to_regclass('public.org_members') is null or to_regclass('public.audit_log') is null or to_regclass('public.org_billing') is null or to_regclass('public.soc_audit') is null then
+    raise exception '0113 requires 0100, 0101, 0107 and 0109 to be applied first';
+  end if;
+end $$;
 create table if not exists public.org_deletion_requests (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null,                                   -- no foreign key: the request outlives the organization

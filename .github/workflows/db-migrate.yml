@@ -1,0 +1,50 @@
+name: db-migrate
+# MANUAL ONLY. Applies supabase/baseline.sql (optional, fresh databases only) and supabase/migrations/ALL.sql to ONE database.
+# Safety layers, in order: (1) workflow_dispatch only; (2) the job runs in the GitHub environment named by the input, so 'production' can require
+# reviewers and 'staging' holds only staging secrets; (3) scripts/env-guard.mjs must pass BEFORE any SQL (target/ref/confirmation/approval checks, fails closed);
+# (4) the migration list is printed before and after. Secrets used: DATABASE_URL (environment secret, never printed).
+# One-time setup by the owner: create environments 'staging' and 'production' (production: Required reviewers = you); repository variable PRODUCTION_PROJECT_REF;
+# per environment: variable EXPECTED_PROJECT_REF and secret DATABASE_URL.
+on:
+  workflow_dispatch:
+    inputs:
+      target: { description: "staging or production", required: true, type: choice, options: [staging, production] }
+      confirm_project_ref: { description: "Type the Supabase project ref of the target database", required: true }
+      apply_baseline: { description: "Apply baseline.sql first (ONLY for a brand-new empty database)", type: boolean, default: false }
+      release_approval: { description: "Production only: type APPROVED-BY-OWNER", required: false, default: "" }
+permissions: { contents: read }
+concurrency: { group: db-migrate, cancel-in-progress: false }
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20.19.0" }
+      - name: Guard (must pass before any SQL)
+        env:
+          TARGET: ${{ inputs.target }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EXPECTED_PROJECT_REF: ${{ vars.EXPECTED_PROJECT_REF }}
+          CONFIRM_PROJECT_REF: ${{ inputs.confirm_project_ref }}
+          PRODUCTION_PROJECT_REF: ${{ vars.PRODUCTION_PROJECT_REF }}
+          RELEASE_APPROVAL: ${{ inputs.release_approval }}
+        run: node scripts/env-guard.mjs
+      - name: Baseline refuses a database that already has data tables
+        if: ${{ inputs.apply_baseline }}
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
+        run: |
+          n=$(psql "$DATABASE_URL" -tAc "select count(*) from information_schema.tables where table_schema='public'")
+          [ "$n" = "0" ] || { echo "::error::public schema is not empty ($n tables); baseline.sql is for brand-new databases only"; exit 1; }
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/baseline.sql
+      - name: Migrations before
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
+        run: psql "$DATABASE_URL" -tAc "select coalesce(string_agg(version,','),'none') from private.app_migrations" || echo "no migration table yet"
+      - name: Apply ALL.sql (idempotent; each migration in its own transaction)
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/ALL.sql
+      - name: Migrations after (expect 0100..0113)
+        env: { DATABASE_URL: "${{ secrets.DATABASE_URL }}" }
+        run: psql "$DATABASE_URL" -tAc "select string_agg(version,',' order by version) from private.app_migrations"

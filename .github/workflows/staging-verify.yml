@@ -1,0 +1,53 @@
+name: staging-verify
+# Runs after a push to the 'staging' branch (Hostinger's GitHub auto-deploy for the STAGING site must watch this branch ONLY) or manually.
+# Job 1 verifies the build (no secrets). Job 2 runs in the protected GitHub environment 'staging': waits for the deployed site, then runs the real smoke test and a bounded load test
+# against vars.STAGING_URL. Both scripts refuse any address that is not a staging/localhost host. Nothing here touches production; no deployment is performed by this workflow.
+on:
+  push: { branches: [staging] }
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: staging-verify, cancel-in-progress: true }
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20.19.0" }
+      - run: bash scripts/run-verification.sh
+      - run: node scripts/secrets-scan.mjs
+  smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      STAGING_URL: ${{ vars.STAGING_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20.19.0" }
+      - name: Wait for the staging site to answer (up to 10 minutes; the host builds on its own)
+        run: |
+          for i in $(seq 1 40); do code=$(curl -s -o /dev/null -w '%{http_code}' "$STAGING_URL/" || true); [ "$code" = "200" ] && { echo "staging answers"; exit 0; }; sleep 15; done
+          echo "::error::staging did not answer 200 in time"; exit 1
+      - name: Smoke test (two real staging users; secrets never printed)
+        env:
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          SMOKE_EMAIL_A: ${{ secrets.SMOKE_EMAIL_A }}
+          SMOKE_PASSWORD_A: ${{ secrets.SMOKE_PASSWORD_A }}
+          SMOKE_EMAIL_B: ${{ secrets.SMOKE_EMAIL_B }}
+          SMOKE_PASSWORD_B: ${{ secrets.SMOKE_PASSWORD_B }}
+        run: set +x; node scripts/staging-smoke.mjs | tee smoke.log
+      - name: Load test (20 s, 10 concurrent, capped at 200 req/s)
+        run: node scripts/load-test.mjs | tee load.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-evidence
+          path: |
+            smoke.log
+            load.log
+          retention-days: 30
