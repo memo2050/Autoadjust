@@ -17,6 +17,7 @@ import { envViolations } from "../tenant/env-isolation";
  *  Refuses when the runtime isolation guard reports a violation, when the Supabase URL is the production project but this is not production,
  *  and when SUPABASE_URL / the service key are missing. */
 export function storeBlockReason(env: NodeJS.ProcessEnv): string | null {
+  if ((env.DEMO_REQUESTS_ENABLED ?? "").toLowerCase() !== "on") return "storage not enabled";   // off by default: no database call is attempted until the owner approves migration 0114 and sets DEMO_REQUESTS_ENABLED=on
   const v = envViolations(env);
   if (v.length) return "environment isolation check failed";
   const ref = /^https:\/\/([a-z0-9]{15,30})\.supabase\.co/i.exec(env.SUPABASE_URL ?? "")?.[1]?.toLowerCase();

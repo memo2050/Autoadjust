@@ -5,9 +5,9 @@ const calls: { url: string; init: any }[] = [];
 (globalThis as any).fetch = async (url: string, init: any) => { calls.push({ url, init }); return new Response(null, { status: 201 }); };
 const good = { name: "Ann", email: "ann@example.com", company: "X", message: "hi" };
 const mk = (body: unknown, h: Record<string, string> = {}, raw?: string) => new Request("https://stg.example/api/demo-request", { method: "POST", headers: { "content-type": "application/json", host: "stg.example", "x-forwarded-for": h["x-forwarded-for"] ?? "1.1.1.1", ...h }, body: raw ?? JSON.stringify(body) });
-const setEnv = (o: Record<string, string | undefined>) => { for (const k of ["APP_ENV", "PRODUCTION_PROJECT_REF", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) delete process.env[k]; Object.assign(process.env, o); };
+const setEnv = (o: Record<string, string | undefined>) => { for (const k of ["APP_ENV", "PRODUCTION_PROJECT_REF", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "DEMO_REQUESTS_ENABLED"]) delete process.env[k]; Object.assign(process.env, o); };
 (async () => {
-  setEnv({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: KEY });
+  setEnv({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: KEY, DEMO_REQUESTS_ENABLED: "on" });
   let r = await POST(mk(good, { "x-forwarded-for": "2.2.2.2", origin: "https://stg.example" })); assert.equal(r.status, 200);
   assert.equal(calls.length, 1); assert.ok(calls[0].url.startsWith(`https://${S}.supabase.co/rest/v1/demo_requests`), "writes to staging project");
   assert.equal(calls[0].init.headers.apikey, KEY, "key only on the server->Supabase hop");
@@ -23,9 +23,10 @@ const setEnv = (o: Record<string, string | undefined>) => { for (const k of ["AP
   for (let i = 0; i < 5; i++) await POST(mk(good, { "x-forwarded-for": "4.4.4.4" }));
   r = await POST(mk(good, { "x-forwarded-for": "4.4.4.4" })); assert.equal(r.status, 429, "6th request from one IP limited");
   assert.equal(calls.length, before + 5, "limited request never reaches the database");
-  setEnv({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: KEY });
+  setEnv({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: KEY, DEMO_REQUESTS_ENABLED: "on" });
   const n = calls.length; r = await POST(mk(good, { "x-forwarded-for": "5.5.5.5" })); assert.equal(r.status, 503, "staging app pointed at production project refuses");
   assert.equal(calls.length, n, "no write attempted against production");
   setEnv({ APP_ENV: "staging", SUPABASE_URL: `https://${S}.supabase.co` }); r = await POST(mk(good, { "x-forwarded-for": "6.6.6.6" })); assert.equal(r.status, 503, "no key -> refuses");
+  setEnv({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: KEY }); const n2 = calls.length; r = await POST(mk(good, { "x-forwarded-for": "7.7.7.7" })); assert.equal(r.status, 503, "storage switch off (default) -> 503"); assert.equal(calls.length, n2, "no database call when storage is not enabled");
   console.log("demo-request route tests passed (" + calls.length + " outbound calls total, all to the staging project)");
 })().catch((e) => { console.error(e); process.exit(1); });

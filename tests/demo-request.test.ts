@@ -11,7 +11,7 @@ assert.ok(long.ok && long.value.name.length === 120 && long.value.message.length
 console.log("demo-request tests passed");
 
 const S = "abcdefghijklmnopqrst", P = "zyxwvutsrqponmlkjihg", key = "x";
-const env = (o: object) => ({ SUPABASE_SERVICE_ROLE_KEY: key, ...o }) as any;
+const env = (o: object) => ({ SUPABASE_SERVICE_ROLE_KEY: key, DEMO_REQUESTS_ENABLED: "on", ...o }) as any;
 assert.equal(storeBlockReason(env({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${S}.supabase.co` })), null, "staging project allowed");
 assert.ok(storeBlockReason(env({ APP_ENV: "staging", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co` })), "staging -> production project refused");
 assert.ok(storeBlockReason(env({ APP_ENV: "", PRODUCTION_PROJECT_REF: P, SUPABASE_URL: `https://${P}.supabase.co` })), "unset APP_ENV -> production project refused");
@@ -21,4 +21,5 @@ assert.ok(storeBlockReason(env({ APP_ENV: "staging" })), "missing url refused");
 assert.ok(!JSON.stringify(storeBlockReason(env({ APP_ENV: "staging", SUPABASE_URL: `https://${P}.supabase.co`, PRODUCTION_PROJECT_REF: P }))).includes(key + "x"), "no secrets in reason");
 let t = 0; const lim = makeLimiter(2, 3, 1000, () => t);
 assert.ok(lim("a") && lim("a") && !lim("a"), "per-key limit"); assert.ok(lim("b") && !lim("c"), "global limit"); t = 1001; assert.ok(lim("a"), "window resets");
+assert.ok(storeBlockReason({ APP_ENV: "staging", SUPABASE_URL: `https://${S}.supabase.co`, SUPABASE_SERVICE_ROLE_KEY: key } as any), "off by default without DEMO_REQUESTS_ENABLED");
 console.log("demo-request hardening tests passed");
