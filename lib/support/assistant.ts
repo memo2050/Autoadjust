@@ -102,7 +102,7 @@ export function createAssistant(d: { env: NodeJS.ProcessEnv; complete?: Complete
       const base = { lang, sources: [] as string[], aiAvailable: !!complete, topic: null as string | null };
       const flag = screenInput(msg); if (flag) return { ...base, mode: "refused", answer: MSG[lang].refused, escalate: false, followUps: follow(lang, null) };
       const history = cleanHistory(i.history, cfg.historyTurns, cfg.msgChars);
-      if (!inScope(msg) && !retrieve(msg, 1).length && !history.some((t) => t.role === "user" && (inScope(t.content) || retrieve(t.content, 1).length))) return { ...base, mode: "refused", answer: MSG[lang].scope, escalate: false, followUps: follow(lang, null) };
+      if (!inScope(msg) && !needsHuman(msg) && !retrieve(msg, 1).length && !history.some((t) => t.role === "user" && (inScope(t.content) || retrieve(t.content, 1).length))) return { ...base, mode: "refused", answer: MSG[lang].scope, escalate: false, followUps: follow(lang, null) };
       const ctxQuery = [...history.filter((t) => t.role === "user").slice(-2).map((t) => t.content), msg].join(" ");
       const hits = retrieve(msg, 4).length ? retrieve(msg, 4) : retrieve(ctxQuery, 4);   // follow-ups ("and the annual price?") are retrieved with the recent user turns as context
       const topic = hits[0]?.chunk.id ?? null, sources = hits.map((h) => h.chunk.id), esc0 = needsHuman(msg) || needsHuman(history.map((t) => t.content).slice(-2).join(" "));
