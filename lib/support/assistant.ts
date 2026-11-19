@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { detectLang, type Lang } from "./kb";
 import { retrieve, type Chunk, type Hit } from "./knowledge";
-import { makeLimiter } from "../demo/request";
+import { createRateLimiters, type RateLimiterFactory } from "../ratelimit/shared";
 
 export type Role = "user" | "assistant"; export interface Turn { role: Role; content: string }
 export interface AskInput { message: string; history?: unknown; lang?: Lang; tier: "anon" | "user"; key: string; ticketsEnabled: boolean }
@@ -94,9 +94,9 @@ const MSG = {
   en: { refused: "I can't help with that request. I can answer questions about AutoAdjust's features, pricing, onboarding and troubleshooting, and I never share system instructions, secrets or other customers' data.", limited: "You've reached the assistant's usage limit for now. Please try again later or contact human support.", none: "I'm not sure about that, and I don't want to guess. A human on the support team can help.", scope: "I can only help with AutoAdjust, SOC/NOC and cybersecurity topics: features, pricing, onboarding and troubleshooting. What would you like to know about those?", unavail: "The AI service isn't available right now, so this answer comes from our verified documentation.", noTickets: "Support tickets aren't available yet. Please use the Contact section of the website or the Request a Demo form", human: "I recommend speaking with a human on our support team." },
   ar: { refused: "لا أستطيع المساعدة في هذا الطلب. يمكنني الإجابة عن ميزات AutoAdjust والأسعار والانضمام واستكشاف الأخطاء، ولا أشارك تعليمات النظام أو الأسرار أو بيانات العملاء الآخرين.", limited: "وصلت إلى حد استخدام المساعد حاليًا. حاول لاحقًا أو تواصل مع الدعم البشري.", none: "لست متأكدًا من ذلك ولا أريد التخمين. يمكن لأحد أفراد فريق الدعم مساعدتك.", scope: "أستطيع المساعدة فقط في مواضيع AutoAdjust وSOC/NOC والأمن السيبراني: الميزات والأسعار والانضمام واستكشاف الأخطاء. ماذا تريد أن تعرف عنها؟", unavail: "خدمة الذكاء الاصطناعي غير متاحة حاليًا، لذا هذه الإجابة من وثائقنا الموثقة.", noTickets: "تذاكر الدعم غير متاحة بعد. يرجى استخدام قسم «اتصل بنا» في الموقع أو نموذج «طلب عرض تجريبي»", human: "أنصح بالتحدث مع أحد أفراد فريق الدعم البشري." },
 };
-export function createAssistant(d: { env: NodeJS.ProcessEnv; complete?: Complete | null; now?: () => number }) {
+export function createAssistant(d: { env: NodeJS.ProcessEnv; complete?: Complete | null; now?: () => number; rl?: RateLimiterFactory }) {
   const cfg = configFrom(d.env); const complete = d.complete === undefined ? anthropicComplete(d.env) : d.complete;
-  const hourAnon = makeLimiter(cfg.anonHour, 1e9, 3600_000, d.now), hourUser = makeLimiter(cfg.userHour, 1e9, 3600_000, d.now), day = makeLimiter(1e9, cfg.globalDay, 86_400_000, d.now);
+  const rl = d.rl ?? createRateLimiters({ env: d.env, now: d.now }), hourAnon = rl("ai-anon", cfg.anonHour, 1e9, 3600_000), hourUser = rl("ai-user", cfg.userHour, 1e9, 3600_000), day = rl("ai-day", 1e9, cfg.globalDay, 86_400_000);
   const human = (l: Lang, tickets: boolean) => `${MSG[l].human} ${tickets ? "" : MSG[l].noTickets}${cfg.contactEmail ? (l === "ar" ? ` أو راسلنا على ${cfg.contactEmail}` : ` or email ${cfg.contactEmail}`) : ""}.`.replace(/\s+\./, ".").trim();
   const follow = (l: Lang, topic: string | null) => (FOLLOW[l][topic ?? ""] ?? FOLLOW[l].default).slice(0, 3);
   return {
@@ -111,8 +111,8 @@ export function createAssistant(d: { env: NodeJS.ProcessEnv; complete?: Complete
       const hits = retrieve(msg, 4).length ? retrieve(msg, 4) : retrieve(ctxQuery, 4);   // follow-ups ("and the annual price?") are retrieved with the recent user turns as context
       const topic = hits[0]?.chunk.id ?? null, sources = hits.map((h) => h.chunk.id), esc0 = needsHuman(msg) || needsHuman(history.map((t) => t.content).slice(-2).join(" "));
       const kbAnswer = () => { const h = hits[0]; return h ? `${MSG[lang].unavail}\n\n${h.chunk[lang]}` : `${MSG[lang].unavail}\n\n${MSG[lang].none}`; };
-      const lim = (i.tier === "user" ? hourUser : hourAnon)(i.key);
-      if (!lim || (complete && !day("global"))) return { ...base, topic, mode: "limited", answer: MSG[lang].limited + " " + human(lang, i.ticketsEnabled), escalate: true, followUps: [] };
+      const lim = await (i.tier === "user" ? hourUser : hourAnon)(i.key);
+      if (!lim || (complete && !(await day("global")))) return { ...base, topic, mode: "limited", answer: MSG[lang].limited + " " + human(lang, i.ticketsEnabled), escalate: true, followUps: [] };
       if (!complete) { const esc = esc0 || !hits.length; return { ...base, topic, sources, mode: "kb", answer: kbAnswer() + (esc ? "\n\n" + human(lang, i.ticketsEnabled) : ""), escalate: esc, followUps: follow(lang, topic) }; }
       const canary = "CANARY-" + randomBytes(6).toString("hex");
       const messages: Turn[] = [...history, { role: "user", content: msg }];

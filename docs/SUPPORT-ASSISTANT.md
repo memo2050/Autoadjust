@@ -36,3 +36,6 @@ Creation/tracking/replies are implemented (`lib/support/tickets.ts`) but **disab
 
 ## Tests
 `tests/support.test.ts`, `tests/support-assistant.test.ts` (RAG accuracy, status honesty, Arabic/English, context, injection and extraction, output screening, escalation, provider outage, quotas, tenant isolation). The model is a stub there: they prove the guardrails, **not live-model answer quality**. Live AI verification requires the key above.
+
+## Shared, persistent rate limits (optional)
+By default limits are per server process (memory) and reset on restart. Setting `RATE_LIMIT_STORE=supabase` (with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` already present) moves the support-chat / ticket / AI-quota counters to the existing `rate_limit_hit` database function (migration 0112), so all instances share them and restarts do not reset them. 24-hour windows (the global daily AI cap) need migration 0117; until it is applied the daily cap falls back to memory while hourly limits are shared. If the database is unreachable the limiter falls back to memory, so a limit is never removed. Client keys are hashed before they are sent. Windows are fixed (clock-aligned) rather than starting at the first hit. Not enabled anywhere until the migration is approved.
