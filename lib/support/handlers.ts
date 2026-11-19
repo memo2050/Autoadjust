@@ -1,9 +1,9 @@
-import { answer } from "./kb";
+import { createAssistant, type Complete } from "./assistant";
 import { parseTicket, newRef, newToken, hashToken, tokenMatches, validRef, validToken, ticketBlockReason, supabaseStore, type TicketStore } from "./tickets";
 import { makeLimiter } from "../demo/request";
 import { clientIp, sameOrigin } from "../analyze/guard";
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
-export interface Deps { env: NodeJS.ProcessEnv; store?: TicketStore; userId?: (req: Request) => Promise<string | null> }
+export interface Deps { env: NodeJS.ProcessEnv; store?: TicketStore; userId?: (req: Request) => Promise<string | null>; complete?: Complete | null }
 async function body(req: Request, max: number): Promise<{ b?: unknown; err?: Response }> {
   if (!(req.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) return { err: json({ error: "invalid" }, 415) };
   let t = ""; try { t = await req.text(); } catch { return { err: json({ error: "invalid" }, 400) }; }
@@ -14,13 +14,16 @@ export function createSupportHandlers(d: Deps) {
   const hops = Math.max(1, Number(d.env.TRUSTED_PROXY_HOPS) || 1);
   const chatLim = makeLimiter(30, 2000, 3600_000), mkLim = makeLimiter(5, 200, 3600_000), readLim = makeLimiter(30, 2000, 3600_000);
   const store = () => d.store ?? supabaseStore(d.env);
+  const assistant = createAssistant({ env: d.env, complete: d.complete });
   const gate = (req: Request) => (sameOrigin(req.headers) ? null : json({ error: "forbidden" }, 403));
   return {
     async chat(req: Request) {
-      const g = gate(req); if (g) return g; if (!chatLim(clientIp(req.headers, hops))) return json({ error: "rate_limited" }, 429);
-      const r = await body(req, 2048); if (r.err) return r.err; const q = (r.b as any)?.message;
+      const g = gate(req); if (g) return g; const ip = clientIp(req.headers, hops); if (!chatLim(ip)) return json({ error: "rate_limited" }, 429);
+      const r = await body(req, 16384); if (r.err) return r.err; const b = (r.b ?? {}) as any, q = b.message;
       if (typeof q !== "string" || !q.trim() || q.length > 500) return json({ error: "invalid" }, 400);
-      return json({ ...answer(q, (r.b as any)?.lang === "ar" ? "ar" : (r.b as any)?.lang === "en" ? "en" : undefined), ticketsEnabled: ticketBlockReason(d.env) === null });
+      const uid = d.userId ? await d.userId(req).catch(() => null) : null;   // only a verified session counts as signed in; it changes the quota tier, nothing else (no tenant data is ever given to the assistant)
+      const res = await assistant.ask({ message: q, history: b.history, lang: b.lang === "ar" ? "ar" : b.lang === "en" ? "en" : undefined, tier: uid ? "user" : "anon", key: uid ?? ip, ticketsEnabled: ticketBlockReason(d.env) === null });
+      return json({ ...res, ticketsEnabled: ticketBlockReason(d.env) === null });
     },
     async create(req: Request) {
       const g = gate(req); if (g) return g; if (!mkLim(clientIp(req.headers, hops))) return json({ error: "rate_limited" }, 429);
