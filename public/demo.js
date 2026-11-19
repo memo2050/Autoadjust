@@ -78,7 +78,7 @@
     var bar = document.createElement("div"); bar.id = "aa-demo"; bar.setAttribute("role", "region"); bar.setAttribute("aria-label", "Demo controls");
     bar.innerHTML = '<b>DEMO DATA</b><span class="hide-s">Simulated environment. Not connected to any real system, customer or production data.</span><span class="sp"></span>' +
       '<a href="/#/home">&larr; Back to Website</a><a href="#/soc" id="aa-soc">SOC demo</a><a href="#/noc" id="aa-noc">NOC demo</a>' +
-      '<button type="button" id="aa-req">Request a Demo</button><a class="pri" href="/account.html">Create Account</a>';
+      '<button type="button" id="aa-req">Request a Demo</button><a class="pri" href="/account.html">Create Free Account</a>';
     document.body.insertBefore(bar, document.body.firstChild);
     document.documentElement.style.setProperty("--aa-h", bar.offsetHeight + "px");
     window.addEventListener("resize", function () { document.documentElement.style.setProperty("--aa-h", bar.offsetHeight + "px"); });
@@ -109,7 +109,7 @@
     });
     /* nav buttons on the page itself */
     var nr = document.querySelector("nav.nv .nr");
-    if (nr) nr.innerHTML = '<a class="btn" href="/account.html">Sign In</a><a class="btn" href="/account.html">Create Account</a><a class="btn" href="#" id="aa-nreq">Request a Demo</a>';
+    if (nr) nr.innerHTML = '<a class="btn" href="/account.html">Sign In</a><a class="btn" href="/account.html">Create Free Account</a><a class="btn" href="#" id="aa-nreq">Request a Demo</a>';
     var nq = document.getElementById("aa-nreq"); if (nq) nq.addEventListener("click", function (e) { e.preventDefault(); open(); });
     if (/[?&]request=1\b/.test(location.search)) setTimeout(open, 400);
     function openSoc() { var b = document.querySelector('.soc-hot[data-role="analyst"]'); if (b) b.click(); }

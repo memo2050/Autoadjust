@@ -7,7 +7,7 @@
   if (/^\/demo\/?$/.test(location.pathname)) return; // exact /demo only
   var KEYS = ["socToken", "aaSession"], ok = false, pending = null, bypass = false, needOrg = false;
   var st = document.createElement("style");
-  st.textContent = 'html:not(.aa-ok) body[data-view="soc"] [data-page="soc"],html:not(.aa-ok) body[data-view="noc"] [data-page="noc"],html:not(.aa-ok) #socws{display:none!important}';
+  st.textContent = 'html:not(.aa-ok) body[data-view="soc"] [data-page="soc"]:not(.aa-pub):not(.aa-keep),html:not(.aa-ok) body[data-view="noc"] [data-page="noc"]:not(.aa-pub),html:not(.aa-ok) #socws{display:none!important}';
   document.head.appendChild(st);
   window.__aaAuth = function () { var t = ""; try { t = sessionStorage.getItem("socToken") || ""; } catch (e) {} return t ? { Authorization: "Bearer " + t } : {}; };
   function tok() { try { return sessionStorage.getItem("socToken") || ""; } catch (e) { return ""; } }
@@ -29,7 +29,7 @@
     return pending;
   }
   function view() { return document.body && document.body.getAttribute("data-view"); }
-  function guard() { var v = view(); if (v !== "soc" && v !== "noc") return; if (ok) return; authed().then(function (a) { if (!a) toLogin(); }); }
+  function guard() { var v = view(); if (v !== "soc" && v !== "noc") return; if (ok) return; authed().then(function (a) { if (!a && needOrg) toLogin(); }); }   // signed out: stay on the public overview; signed in without an organization: go fix that
   document.addEventListener("click", function (e) {
     if (bypass) return;
     var el = e.target.closest && e.target.closest(".soc-hot,#noc-opensoc,[data-open-soc]"); if (!el) return;
