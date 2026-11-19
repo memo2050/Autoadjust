@@ -13,6 +13,6 @@ module.exports = {
   },
   async rewrites() {
     // Home page = the static landing page in /public (SOC and NOC are hash routes inside it)
-    return { beforeFiles: [{ source: "/", destination: "/landing.html" }, { source: "/demo", destination: "/landing.html" }, { source: "/pricing", destination: "/pricing.html" }] };
+    return { beforeFiles: [{ source: "/", destination: "/landing.html" }, { source: "/demo", destination: "/landing.html" }, { source: "/pricing", destination: "/pricing.html" }, { source: "/sales", destination: "/sales.html" }, { source: "/sales-agent", destination: "/sales-agent.html" }] };
   },
 };

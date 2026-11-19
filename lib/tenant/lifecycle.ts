@@ -21,7 +21,7 @@ export const OWNED_TABLES = [
   "topology_changes", "topology_snapshots", "vulnerability_findings",
 ] as const;
 /** Tables that exist in the database but hold no per-organization customer data (reference/config/system/legacy website-builder data). A new table must be added to one list or the other: the test enforces it. */
-export const NOT_ORG_DATA = ["organizations", "billing_plans", "billing_settings", "rate_limits", "demo_requests", "support_tickets", "support_messages", "org_deletion_requests", "org_tombstones", "soc_kev", "soc_meta", "app_records", "projects", "sites", "usage", "versions"] as const;
+export const NOT_ORG_DATA = ["organizations", "billing_plans", "billing_settings", "rate_limits", "demo_requests", "support_tickets", "sales_leads", "sales_activities", "sales_followups", "sales_audit", "support_messages", "org_deletion_requests", "org_tombstones", "soc_kev", "soc_meta", "app_records", "projects", "sites", "usage", "versions"] as const;
 const ORDER_COL: Record<string, string> = { org_members: "userId", org_billing: "orgId" };
 const SECRET_KEY = /^(secret|keyhash|tokenhash|password|enc|apikey|credentials?|privatekey)$/i;
 const PAGE = 1000, MAX_ROWS_PER_TABLE = 100_000, MAX_ZIP_BYTES = 50 * 1024 * 1024, DAY = 86400000, HOLD_DAYS = 14, LINK_MINUTES = 10;

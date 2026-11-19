@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Sales console</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e;--warn:#f5b84b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}.mut{color:var(--mut)}
+input,button,select,textarea{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg);border-color:var(--bd)}button.bad{background:transparent;color:var(--bad);border-color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left;font-size:14px;vertical-align:top}
+.msg{min-height:20px;font-size:14px}.err{color:var(--bad)}.good{color:var(--ok)}a{color:var(--acc)}.hide{display:none}
+.banner{border-radius:10px;padding:10px 12px;margin:10px 0;border:1px solid var(--warn);color:var(--warn)}.banner.info{border-color:var(--bd);color:var(--mut)}
+.tabs button{margin-right:6px}.tabs button.on{background:var(--acc)}.tabs button:not(.on){background:transparent;border-color:var(--bd);color:var(--fg)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.kpi{border:1px solid var(--bd);border-radius:10px;padding:10px}.kpi b{display:block;font-size:22px}
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(190px,1fr);gap:10px;overflow-x:auto;padding-bottom:8px}.col{border:1px solid var(--bd);border-radius:10px;padding:8px;min-height:80px}.col h3{font-size:13px;margin:0 0 6px;text-transform:uppercase;color:var(--mut)}
+.lead{border:1px solid var(--bd);border-radius:8px;padding:6px 8px;margin:6px 0;cursor:pointer;background:#0d1428;font-size:13px}.lead:hover{border-color:var(--acc)}
+.bar{height:10px;background:var(--acc);border-radius:4px}.g-A{color:var(--ok)}.g-B{color:var(--acc)}.g-C{color:var(--warn)}.g-D{color:var(--bad)}
+pre{white-space:pre-wrap;background:#0d1428;border:1px solid var(--bd);border-radius:8px;padding:8px;font:13px/1.4 inherit}
+</style></head><body><main>
+<h1>Sales console</h1><div class="mut">AutoAdjust leads, pipeline, follow-ups and analytics. Staff only.</div>
+<div id="gate" class="card hide"><b>Sign in required.</b> <a href="/account.html">Sign in on the account page</a> in this tab, then come back here.</div>
+<div id="app" class="hide">
+  <div id="banner" class="banner info"></div>
+  <div class="row tabs" id="tabs"></div>
+  <div id="msg" class="msg"></div>
+  <div id="view"></div>
+  <div id="detail" class="card hide"></div>
+</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)},S={ses:null,me:null,tab:"dashboard"};
+function el(t,a,k){var e=document.createElement(t);if(a)for(var x in a){if(x==="text")e.textContent=a[x];else if(x==="onclick")e.onclick=a[x];else if(x==="value")e.value=a[x];else e.setAttribute(x,a[x])}(k||[]).forEach(function(c){if(c!=null)e.appendChild(typeof c==="string"?document.createTextNode(c):c)});return e}
+var lastSay=0;function say(t,c){var m=$("msg");m.textContent=t||"";m.className="msg "+(c||"");if(t)lastSay=Date.now()}
+function usd(n){return n==null?"—":new Intl.NumberFormat(undefined,{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n)}
+async function api(method,path,body){var r=await fetch("/api/sales/"+path,{method:method,headers:{authorization:"Bearer "+S.ses.access_token,"content-type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});var j={};try{j=await r.json()}catch(e){}return{s:r.status,j:j}}
+function clear(n){while(n.firstChild)n.removeChild(n.firstChild)}
+var TABS=[["dashboard","Dashboard"],["pipeline","Pipeline"],["leads","Leads"],["followups","Follow-ups"],["audit","Audit"]];
+function renderTabs(){var t=$("tabs");clear(t);TABS.forEach(function(x){if(x[0]==="audit"&&!S.me.perms.admin)return;t.appendChild(el("button",{text:x[1],class:S.tab===x[0]?"on":"",onclick:function(){S.tab=x[0];$("detail").className="card hide";go()}}))})}
+function table(head,rows){var t=el("table",null,[el("tr",null,head.map(function(h){return el("th",{text:h})}))]);rows.forEach(function(r){t.appendChild(el("tr",null,r.map(function(c){return el("td",null,[c])})))});return t}
+function bars(obj){var max=Math.max(1,Math.max.apply(null,Object.keys(obj).map(function(k){return obj[k]})));return el("div",null,Object.keys(obj).map(function(k){return el("div",{class:"row"},[el("span",{text:k,style:"width:150px"}),el("div",{class:"bar",style:"width:"+Math.round(obj[k]/max*220)+"px"}),el("span",{text:String(obj[k])})])}))}
+async function dashboard(v){var r=await api("GET","dashboard?days=30");if(r.s!==200)return say("Could not load the dashboard ("+r.s+").","err");var d=r.j,t=d.totals;
+ var k=[["Leads",t.leads],["New (30d)",t.newInWindow],["Open",t.open],["Won",t.won],["Lost",t.lost],["Unassigned",t.unassigned],["Avg score",t.avgScore],["Win rate",d.rates.winRate==null?"—":d.rates.winRate+"%"],["Demo rate",d.rates.demoRate==null?"—":d.rates.demoRate+"%"],["Open pipeline",usd(d.pipeline.openAnnualUsd)],["Weighted",usd(d.pipeline.weightedAnnualUsd)],["Won value",usd(d.pipeline.wonAnnualUsd)]];
+ v.appendChild(el("div",{class:"kpis"},k.map(function(x){return el("div",{class:"kpi"},[el("span",{class:"mut",text:x[0]}),el("b",{text:String(x[1])})])})));
+ v.appendChild(el("div",{class:"mut",text:d.pipeline.note}));
+ [["Funnel",d.funnel],["By status",d.byStatus],["By grade",d.byGrade],["By source",d.bySource],["Recommended plan",d.byPlan],["Timeline",d.byTimeline],["Follow-ups",d.followups],["Leads per day (30d)",d.leadsPerDay]].forEach(function(x){v.appendChild(el("div",{class:"card"},[el("h2",{text:x[0]}),bars(x[1])]))})}
+function leadCard(l){return el("div",{class:"lead",onclick:function(){openLead(l.id)}},[el("b",{text:l.name}),el("div",{class:"mut",text:(l.company||"—")}),el("span",{class:"g-"+l.grade,text:"Grade "+l.grade+" · "+l.score}),el("span",{class:"mut",text:l.plan||l.recommended_plan?" · "+(l.plan||l.recommended_plan):""})])}
+async function pipeline(v){var r=await api("GET","pipeline");if(r.s!==200)return say("Could not load the pipeline.","err");v.appendChild(el("div",{class:"board"},r.j.stages.map(function(s){return el("div",{class:"col"},[el("h3",{text:s.status.replace("_"," ")+" ("+s.count+")"}),el("div",{class:"mut",text:usd(s.valueAnnualUsd)+"/yr"})].concat(s.leads.map(leadCard)))})))}
+async function leads(v){var f=el("div",{class:"row"},[el("input",{id:"q",placeholder:"Search name, email, company"}),el("select",{id:"st"},[el("option",{value:"",text:"Any status"})].concat(["new","contacted","qualified","demo_requested","demo_scheduled","proposal","won","lost","disqualified"].map(function(s){return el("option",{value:s,text:s})}))),el("select",{id:"gr"},[el("option",{value:"",text:"Any grade"})].concat(["A","B","C","D"].map(function(s){return el("option",{value:s,text:s})}))),el("button",{text:"Search",onclick:function(){go()}})]);v.appendChild(f);
+ var q=new URLSearchParams();var qv=S.q||"";if(qv)q.set("q",qv);if(S.st)q.set("status",S.st);if(S.gr)q.set("grade",S.gr);var r=await api("GET","leads?"+q.toString());if(r.s!==200)return say("Could not load leads.","err");
+ $("q").value=qv;$("st").value=S.st||"";$("gr").value=S.gr||"";["q","st","gr"].forEach(function(i){$(i).onchange=function(){S.q=$("q").value;S.st=$("st").value;S.gr=$("gr").value}});$("q").onkeyup=function(){S.q=$("q").value};
+ v.appendChild(el("div",{class:"mut",text:r.j.total+" lead(s)"}));
+ v.appendChild(table(["Name","Company","Status","Grade","Score","Plan","Source","Created"],r.j.leads.map(function(l){return[el("a",{href:"#",text:l.name,onclick:function(e){e.preventDefault();openLead(l.id)}}),document.createTextNode(l.company||"—"),document.createTextNode(l.status),el("span",{class:"g-"+l.grade,text:l.grade}),document.createTextNode(String(l.score)),document.createTextNode(l.recommended_plan||"—"),document.createTextNode(l.source),document.createTextNode(new Date(l.created_at).toLocaleDateString())]})));
+ if(S.me.perms.edit){v.appendChild(el("div",{class:"card"},[el("h2",{text:"Add lead manually"}),el("div",{class:"row"},[el("input",{id:"mn",placeholder:"Name"}),el("input",{id:"me",placeholder:"Work email"}),el("input",{id:"mc",placeholder:"Company"}),el("input",{id:"mp",type:"number",placeholder:"Endpoints",style:"width:110px"}),el("button",{text:"Add",onclick:async function(){var r=await api("POST","leads",{name:$("mn").value,email:$("me").value,company:$("mc").value,endpoints:$("mp").value?Number($("mp").value):null,needs:["soc"],timeline:"unknown"});say(r.s<300?"Lead saved.":(r.j.message||r.j.error||"Failed"),r.s<300?"good":"err");if(r.s<300)go()}})])]))}}
+async function followups(v){var r=await api("GET","followups");if(r.s!==200)return say("Could not load follow-ups.","err");v.appendChild(el("div",{class:"banner info",text:"Email mode: "+r.j.emailMode+". Follow-ups are drafts until approved; no real email can be sent by this system."}));
+ if(S.me.perms.admin)v.appendChild(el("div",{class:"row"},[el("button",{class:"sec",text:"Run due follow-ups (dry run)",onclick:async function(){var x=await api("POST","followups/run",{});say(x.s===200?x.j.note+" Processed: "+x.j.processed+", due: "+x.j.due:"Failed","good")}})]));
+ v.appendChild(table(["Status","Step","Subject","Due","Lead",""],r.j.followups.map(function(f){var b=[];if(f.status==="draft"&&S.me.perms.admin)b.push(el("button",{text:"Approve",onclick:async function(){var x=await api("POST","followups/"+f.id+"/approve",{});say(x.s===200?"Approved.":(x.j.error||"Failed"),x.s===200?"good":"err");go()}}));if((f.status==="draft"||f.status==="approved")&&S.me.perms.edit)b.push(el("button",{class:"bad",text:"Cancel",onclick:async function(){var x=await api("POST","followups/"+f.id+"/cancel",{});say(x.s===200?"Cancelled.":(x.j.error||"Failed"),x.s===200?"good":"err");go()}}));return[document.createTextNode(f.status),document.createTextNode(f.template+" #"+f.step),document.createTextNode(f.subject),document.createTextNode(new Date(f.due_at).toLocaleDateString()),el("a",{href:"#",text:f.lead_id.slice(0,8),onclick:function(e){e.preventDefault();openLead(f.lead_id)}}),el("span",null,b)]})))}
+async function audit(v){var r=await api("GET","audit?limit=100");if(r.s!==200)return say("Not allowed.","err");v.appendChild(table(["When","Actor","Action","Target"],r.j.audit.map(function(a){return[document.createTextNode(new Date(a.at).toLocaleString()),document.createTextNode(a.actor),document.createTextNode(a.action),document.createTextNode(a.target.slice(0,8))]})))}
+async function openLead(id){var r=await api("GET","leads/"+id);if(r.s!==200)return say("Could not open lead.","err");var L=r.j.lead,d=$("detail");clear(d);d.className="card";
+ d.appendChild(el("h2",{text:L.name+" — "+(L.company||"no company")}));d.appendChild(el("div",{class:"mut",text:L.email+" · "+L.job_title+" · "+L.country+" · "+L.lang}));
+ d.appendChild(el("div",{text:"Status: "+L.status+" · Grade "+L.grade+" ("+L.score+") · Plan: "+(L.recommended_plan||"—")+" · Owner: "+(L.owner_user_id||"unassigned")+(L.unsubscribed?" · UNSUBSCRIBED":"")}));
+ d.appendChild(el("div",{class:"mut",text:"Endpoints "+L.endpoints+" · devices "+L.devices+" · users "+L.users+" · retention "+L.retention_days+"d · needs "+(L.needs||[]).join(", ")+" · timeline "+L.timeline}));
+ if(L.recommendation&&L.recommendation.reasons)d.appendChild(el("pre",{text:L.recommendation.reasons.join("\n")+"\n"+(L.recommendation.notAvailable||[]).join("\n")}));
+ if(S.me.perms.edit){var sel=el("select",{id:"ns"},["new","contacted","qualified","demo_requested","demo_scheduled","proposal","won","lost","disqualified"].map(function(s){return el("option",{value:s,text:s})}));sel.value=L.status;
+  d.appendChild(el("div",{class:"row"},[sel,el("input",{id:"lr",placeholder:"Lost reason (if lost)"}),el("button",{text:"Change status",onclick:async function(){var x=await api("POST","leads/"+id+"/status",{status:$("ns").value,lost_reason:$("lr").value});say(x.s===200?"Status updated.":(x.j.error||"Failed")+(x.j.from?" ("+x.j.from+" -> "+x.j.to+")":""),x.s===200?"good":"err");if(x.s===200)openLead(id)}}),el("button",{class:"sec",text:"Assign to me",onclick:async function(){var x=await api("POST","leads/"+id+"/assign",{owner:"me"});say(x.s===200?"Assigned.":(x.j.error||"Failed"),x.s===200?"good":"err");if(x.s===200)openLead(id)}}),el("button",{class:"sec",text:"Re-score",onclick:async function(){var x=await api("POST","leads/"+id+"/requalify",{});say(x.s===200?"Re-scored.":(x.j.error||"Failed"),x.s===200?"good":"err");if(x.s===200)openLead(id)}}),el("button",{class:"sec",text:"Mark unsubscribed",onclick:async function(){var x=await api("POST","leads/"+id+"/unsubscribe",{});say(x.s===200?"Unsubscribed; follow-ups cancelled.":(x.j.error||"Failed"),x.s===200?"good":"err");if(x.s===200)openLead(id)}})]));
+  d.appendChild(el("div",{class:"row"},[el("input",{id:"nt",placeholder:"Add a note",style:"flex:1;min-width:240px"}),el("button",{text:"Add note",onclick:async function(){var x=await api("POST","leads/"+id+"/notes",{body:$("nt").value});say(x.s===200?"Note added.":(x.j.error||"Failed"),x.s===200?"good":"err");if(x.s===200)openLead(id)}})]))}
+ if(S.me.perms.admin&&!L.anonymized)d.appendChild(el("div",{class:"row"},[el("button",{class:"bad",text:"Erase personal data",onclick:async function(){if(!confirm("Remove this lead's personal data? This cannot be undone."))return;var x=await api("POST","leads/"+id+"/anonymize",{});say(x.s===200?"Personal data removed.":(x.j.error||"Failed"),x.s===200?"good":"err");go();openLead(id)}})]));
+ d.appendChild(el("h2",{text:"Follow-ups"}));d.appendChild(table(["Status","Step","Subject"],r.j.followups.map(function(f){return[document.createTextNode(f.status),document.createTextNode(f.template),document.createTextNode(f.subject)]})));
+ d.appendChild(el("h2",{text:"Activity"}));d.appendChild(table(["When","Who","Type","Detail"],r.j.activities.map(function(a){return[document.createTextNode(new Date(a.at).toLocaleString()),document.createTextNode(a.actor),document.createTextNode(a.kind),document.createTextNode(a.body)]})));d.scrollIntoView&&d.scrollIntoView({behavior:"smooth"})}
+async function go(){var v=$("view");clear(v);renderTabs();if(Date.now()-lastSay>1500)say("");try{await({dashboard:dashboard,pipeline:pipeline,leads:leads,followups:followups,audit:audit}[S.tab])(v)}catch(e){say("Something went wrong.","err")}}
+async function init(){try{S.ses=JSON.parse(sessionStorage.getItem("aaSession")||"null")}catch(e){}
+ if(!S.ses||!S.ses.access_token){$("gate").className="card";return}
+ var r=await api("GET","me");if(r.s===401){$("gate").className="card";return}
+ if(r.s===403){$("gate").className="card";$("gate").textContent="This account is not authorized for the sales console.";return}
+ if(r.s===503){$("gate").className="card";$("gate").textContent="The sales agent is not enabled in this environment yet.";return}
+ S.me=r.j;$("app").className="";$("banner").textContent="Signed in as "+(S.me.email||"")+" · role: "+S.me.role+" · email mode: "+S.me.emailMode+" (no real email is sent by this system)";go()}
+init()})();
+</script></main></body></html>

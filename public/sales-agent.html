@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Adjust — Find your plan</title>
+<style>
+:root{--bg:#0b1020;--card:#121a30;--bd:#25314f;--fg:#e8ecf6;--mut:#93a0bd;--acc:#4f8cff;--bad:#ff6b6b;--ok:#3ecf8e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 60px}h1{font-size:22px;margin:0 0 4px}.mut{color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:14px 0}
+input,button,select,textarea{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:#0d1428;color:var(--fg)}
+button{background:var(--acc);border-color:var(--acc);cursor:pointer;color:#fff}button.sec{background:transparent;color:var(--fg)}
+#log{max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:8px}.m{padding:8px 12px;border-radius:10px;max-width:90%;white-space:pre-wrap}.u{align-self:flex-end;background:var(--acc)}.a{align-self:flex-start;background:#0d1428;border:1px solid var(--bd)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.row input{flex:1;min-width:150px}.rec b{color:var(--ok)}[dir=rtl] .u{align-self:flex-start}[dir=rtl] .a{align-self:flex-end}
+.hp{position:absolute;left:-9999px}.err{color:var(--bad)}.good{color:var(--ok)}
+</style></head><body><main id="root">
+<div class="row" style="justify-content:space-between"><div><h1 id="t">Find the right plan</h1><div class="mut" id="sub">Tell us about your environment and get a plan suggestion. Pricing is a launch proposal; online payment is not enabled.</div></div><button class="sec" id="lang">العربية</button></div>
+<div class="card"><div id="log" aria-live="polite"></div><div class="row"><input id="msg" maxlength="500" placeholder="Type your answer…" style="flex:3"><button id="send">Send</button></div></div>
+<div class="card" id="rec" hidden></div>
+<details class="card"><summary id="fsum">Prefer a form? Request a demo or a call</summary>
+<form id="f" autocomplete="on"><div class="row"><input name="name" placeholder="Name" required><input name="email" type="email" placeholder="Work email" required></div>
+<div class="row"><input name="company" placeholder="Company"><input name="job_title" placeholder="Your role"></div>
+<div class="row"><input name="endpoints" type="number" min="0" placeholder="Endpoints"><input name="devices" type="number" min="0" placeholder="Network devices"><input name="users" type="number" min="0" placeholder="Users"></div>
+<div class="row"><label><input type="checkbox" name="needs" value="soc"> SOC</label><label><input type="checkbox" name="needs" value="noc"> NOC</label><label><input type="checkbox" name="needs" value="wazuh"> Wazuh</label><label><input type="checkbox" name="needs" value="zabbix"> Zabbix</label>
+<select name="timeline"><option value="unknown">Timeline</option><option value="now">Now</option><option value="1-3m">1-3 months</option><option value="3-6m">3-6 months</option><option value="later">Later</option></select></div>
+<div class="row"><label class="mut">Preferred demo time (optional) <input name="slot" type="datetime-local"></label></div>
+<div class="row"><textarea name="message" maxlength="2000" placeholder="Anything else?" style="flex:1;min-height:60px"></textarea></div>
+<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+<label class="row"><input type="checkbox" name="consent" required style="flex:none"> <span id="cons">I agree that the AutoAdjust team may contact me by email about this request.</span></label>
+<button type="submit" id="go">Send request</button><div id="fmsg" class="mut" role="status"></div></form></details>
+<script>
+(function(){var $=function(i){return document.getElementById(i)},L="en",A={},busy=false;
+var T={en:{t:"Find the right plan",send:"Send",go:"Send request",ph:"Type your answer…",hi:"Hi! I can suggest a plan and pass your details to our team. To start: how many endpoints (laptops, desktops, servers) do you want to monitor, and do you need security (SOC), network (NOC), or both?",fsum:"Prefer a form? Request a demo or a call",cons:"I agree that the AutoAdjust team may contact me by email about this request."},ar:{t:"اعثر على الباقة المناسبة",send:"إرسال",go:"إرسال الطلب",ph:"اكتب إجابتك…",hi:"مرحبًا! يمكنني اقتراح باقة وتحويل بياناتك إلى فريقنا. للبدء: كم عدد نقاط النهاية (لابتوبات، أجهزة مكتبية، خوادم) التي تريد مراقبتها، وهل تحتاج المراقبة الأمنية (SOC) أم مراقبة الشبكة (NOC) أم كليهما؟",fsum:"تفضّل نموذجًا؟ اطلب عرضًا تجريبيًا أو مكالمة",cons:"أوافق على أن يتواصل معي فريق AutoAdjust عبر البريد الإلكتروني بخصوص هذا الطلب."}};
+function add(c,t){var d=document.createElement("div");d.className="m "+c;d.textContent=t;$("log").appendChild(d);$("log").scrollTop=1e9}
+function apply(){var x=T[L];document.documentElement.lang=L;$("root").dir=L==="ar"?"rtl":"ltr";$("t").textContent=x.t;$("send").textContent=x.send;$("go").textContent=x.go;$("msg").placeholder=x.ph;$("fsum").textContent=x.fsum;$("cons").textContent=x.cons;$("lang").textContent=L==="ar"?"English":"العربية"}
+function showRec(r){if(!r)return;var b=$("rec");b.hidden=false;b.className="card rec";b.textContent="";var h=document.createElement("div");h.innerHTML="";var s=document.createElement("b");s.textContent=r.planName+(r.addons&&r.addons.length?" + add-ons":"");h.appendChild(s);h.appendChild(document.createTextNode(" — "+(r.monthlyUsd==null?"custom pricing":"$"+r.monthlyUsd+"/month ($"+r.annualUsd+"/year billed annually)")));b.appendChild(h);(r.reasons||[]).forEach(function(x){var p=document.createElement("div");p.className="mut";p.textContent=x;b.appendChild(p)});(r.notAvailable||[]).concat(r.caveats||[]).forEach(function(x){var p=document.createElement("div");p.className="mut";p.textContent="• "+x;b.appendChild(p)})}
+async function post(path,body){var r=await fetch("/api/sales/"+path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});var j={};try{j=await r.json()}catch(e){}return{s:r.status,j:j}}
+async function send(){if(busy)return;var m=$("msg").value.trim();if(!m)return;busy=true;$("msg").value="";add("u",m);var r=await post("agent",{message:m,answers:A,lang:L});busy=false;
+ if(r.s===429){add("a",L==="ar"?"طلبات كثيرة. حاول لاحقًا.":"Too many requests. Please try again later.");return}if(r.s!==200){add("a",L==="ar"?"تعذر الإرسال الآن.":"Sorry, something went wrong.");return}A=r.j.answers||{};add("a",r.j.reply);showRec(r.j.recommendation)}
+$("send").onclick=send;$("msg").onkeydown=function(e){if(e.key==="Enter")send()};$("lang").onclick=function(){L=L==="en"?"ar":"en";apply()};
+$("f").onsubmit=async function(e){e.preventDefault();var f=e.target,fd=new FormData(f),o={lang:L,consent_contact:fd.get("consent")==="on",website:fd.get("website")||""};["name","email","company","job_title","message","timeline"].forEach(function(k){o[k]=fd.get(k)||""});["endpoints","devices","users"].forEach(function(k){var v=fd.get(k);o[k]=v===""||v==null?null:Number(v)});o.needs=fd.getAll("needs");var s=fd.get("slot");o.demo_slots=s?[new Date(s).toISOString()]:[];
+ var m=$("fmsg");m.className="mut";m.textContent="…";var r=await post("intake",o);if(r.s===200){m.className="good";m.textContent=r.j.message;showRec(r.j.recommendation);f.reset()}else if(r.s===503){m.className="err";m.textContent=L==="ar"?"حفظ الطلبات غير مفعّل بعد في هذه البيئة. هذه هي الباقة المقترحة.":"Saving requests is not enabled in this environment yet. Here is the suggested plan.";showRec(r.j.recommendation)}else if(r.s===400){m.className="err";m.textContent=r.j.message||"Please check the form."}else{m.className="err";m.textContent=r.s===429?"Too many requests. Please try again later.":"Could not send. Please try again."}};
+apply();add("a",T[L].hi)})();
+</script></main></body></html>
