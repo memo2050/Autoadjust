@@ -1,7 +1,7 @@
 /* Auto Adjust public demo layer. Active ONLY on /demo . Nothing here talks to a backend:
    - fetch() to /api/soc/* is answered locally with a non-JSON 404 so the page's built-in SAMPLE modes activate.
    - fetch() to /api/analyze is answered by the scripted, clearly-labelled SIMULATED responder below (no real AI call, no quota, no keys).
-   - the only network call allowed out is POST /api/demo-request (the Request a Demo form). Every other /api/* call is blocked.
+   - the only network calls allowed out are POST /api/demo-request (the Request a Demo form) and POST /api/support/chat (read-only FAQ answers; tickets are not available in demo). Every other /api/* call is blocked.
    All data on screen is simulated. */
 (function () {
   "use strict";
@@ -23,7 +23,7 @@
       var b = bodyOf(init), out = respond(String(b.text || ""), b.mode);
       return new Promise(function (ok) { setTimeout(function () { ok(new Response(out, { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8" } })); }, 700 + Math.random() * 600); });
     }
-    if (p === "/api/demo-request") return realFetch(u, init);
+    if (p === "/api/demo-request" || p === "/api/support/chat") return realFetch(u, init);
     blocked.push(p);
     return Promise.resolve(new Response("Blocked in demo mode", { status: 403 }));
   };
