@@ -9,6 +9,7 @@
   var st = document.createElement("style");
   st.textContent = 'html:not(.aa-ok) body[data-view="soc"] [data-page="soc"],html:not(.aa-ok) body[data-view="noc"] [data-page="noc"],html:not(.aa-ok) #socws{display:none!important}';
   document.head.appendChild(st);
+  window.__aaAuth = function () { var t = ""; try { t = sessionStorage.getItem("socToken") || ""; } catch (e) {} return t ? { Authorization: "Bearer " + t } : {}; };
   function tok() { try { return sessionStorage.getItem("socToken") || ""; } catch (e) { return ""; } }
   function clear() { KEYS.forEach(function (k) { try { sessionStorage.removeItem(k); } catch (e) {} }); }
   function setOk(v) { ok = v; document.documentElement.classList.toggle("aa-ok", v); var b = document.getElementById("aaSignout"); if (b) b.style.display = v ? "" : "none"; }
@@ -44,7 +45,10 @@
         ev.preventDefault(); var t = tok(); clear(); setOk(false);
         var done = function () { if (view() === "soc" || view() === "noc") location.replace("/#/home"); location.reload(); };
         if (!t) return done();
-        fetch("/api/auth/config").then(function (r) { return r.json(); }).then(function (c) { return c.configured ? fetch(c.url + "/auth/v1/logout", { method: "POST", headers: { apikey: c.anonKey, Authorization: "Bearer " + t } }) : null; }).then(done, done);
+        // server revokes the session at once (denylist + Supabase Auth sign-out); then the browser-side Supabase call as a second path
+        fetch("/api/auth/signout", { method: "POST", headers: { Authorization: "Bearer " + t } }).catch(function () {}).then(function () {
+          return fetch("/api/auth/config").then(function (r) { return r.json(); }).then(function (c) { return c.configured ? fetch(c.url + "/auth/v1/logout", { method: "POST", headers: { apikey: c.anonKey, Authorization: "Bearer " + t } }) : null; });
+        }).then(done, done);
       });
       nr.appendChild(a);
     }

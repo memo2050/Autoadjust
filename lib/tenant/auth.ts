@@ -87,20 +87,52 @@ export async function verifyJwtAsym(token: string, jwksUrl: string, issuer: stri
   } catch { return null; }
 }
 
+/** Session revocation. Access tokens are JWTs checked locally, so on their own they stay valid until they expire even after sign-out.
+ *  To close that gap every accepted token's SESSION (the `session_id` claim) is also confirmed alive with Supabase Auth (`GET /auth/v1/user`, which fails once the session is
+ *  deleted by sign-out). A positive answer is cached for SESSION_CHECK_TTL_MS (default 30 s), a negative one for good, and sign-out through this server revokes at once (denylist).
+ *  SESSION_REVOCATION_CHECK=off disables it. If Supabase Auth cannot be reached, a positive answer younger than 10 minutes is reused; otherwise the request is refused (fail closed). */
+const sessCache = new Map<string, { alive: boolean; at: number }>();
+const sessDeny = new Map<string, number>();
+export const _resetSessionCache = () => { sessCache.clear(); sessDeny.clear(); };
+const sidOf = (token: string, c: any): string => (typeof c?.session_id === "string" && c.session_id ? c.session_id : "t:" + sha256(token));
+export function revokeSession(sid: string, untilMs: number, now = Date.now()) { for (const [k, v] of sessDeny) if (v <= now) sessDeny.delete(k); sessDeny.set(sid, untilMs); }
+export async function sessionAlive(token: string, c: any, f: typeof fetch, env: NodeJS.ProcessEnv = process.env, now = Date.now()): Promise<boolean> {
+  if ((env.SESSION_REVOCATION_CHECK ?? "on").toLowerCase() === "off") return true;
+  const sid = sidOf(token, c), dead = sessDeny.get(sid); if (dead && dead > now) return false;
+  const hit = sessCache.get(sid), ttl = Math.max(0, Number(env.SESSION_CHECK_TTL_MS ?? 30_000));
+  if (hit && (!hit.alive || now - hit.at < ttl)) return hit.alive;
+  const url = env.SUPABASE_URL, key = env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return true;                                          // not configured (local/dev): nothing to ask
+  const r = await f(`${url.replace(/\/$/, "")}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
+  const remember = (alive: boolean) => { if (sessCache.size > 5000) sessCache.clear(); sessCache.set(sid, { alive, at: now }); return alive; };
+  if (r && (r.status === 401 || r.status === 403 || r.status === 404)) return remember(false);   // session gone (signed out / revoked) or token refused
+  if (r && r.ok) return remember(true);
+  return !!hit && hit.alive && now - hit.at < 600_000;                      // Supabase Auth unreachable or erroring: short grace for known-good sessions, else refuse
+}
+/** Sign out THIS session: deny it immediately on this server and delete it at Supabase Auth. Returns false if the token is not valid. */
+export async function signOutToken(token: string, f: typeof fetch = fetch, now = Date.now()): Promise<boolean> {
+  let c: any; try { c = JSON.parse(b64u(token.split(".")[1]).toString()); } catch { return false; }
+  const u = await userFromToken(token, f, true); if (!u) return false;
+  revokeSession(sidOf(token, c), (typeof c.exp === "number" ? c.exp * 1000 : now + 3600_000) + 60_000, now);
+  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (url && key) await f(`${url.replace(/\/$/, "")}/auth/v1/logout`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
+  return true;
+}
+
 type TokenUser = { id: string; email?: string; activeOrg?: string; aal?: string };
 const toUser = (c: any): TokenUser => ({ id: c.sub, email: c.email, activeOrg: c.user_metadata?.active_org, aal: typeof c.aal === "string" ? c.aal : undefined });
 
-async function userFromToken(token: string, f: typeof fetch): Promise<TokenUser | null> {
+async function userFromToken(token: string, f: typeof fetch, skipSession = false): Promise<TokenUser | null> {
   const secret = process.env.SUPABASE_JWT_SECRET, issuer = issuerOf(process.env);
   let alg = ""; try { alg = JSON.parse(b64u(token.split(".")[0]).toString()).alg; } catch { return null; }
   // Asymmetric signing keys (current Supabase default): verify locally against the project's JWKS. Needs SUPABASE_URL (it also fixes the expected issuer).
   if (alg === "ES256" || alg === "RS256") {
     if (!issuer) return null;
     const c = await verifyJwtAsym(token, `${issuer}/.well-known/jwks.json`, issuer, f);
-    return c ? toUser(c) : null;
+    return c && (skipSession || await sessionAlive(token, c, f)) ? toUser(c) : null;
   }
   if (alg !== "HS256") return null;
-  if (secret) { const c = verifyJwtHs256(token, secret); return c && (!issuer || c.iss === issuer) ? toUser(c) : null; }
+  if (secret) { const c = verifyJwtHs256(token, secret); return c && (!issuer || c.iss === issuer) && (skipSession || await sessionAlive(token, c, f)) ? toUser(c) : null; }
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const r = await f(`${url.replace(/\/$/, "")}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } }).catch(() => null);
