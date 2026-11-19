@@ -53,6 +53,12 @@ test("prompt injection and extraction attempts are refused without calling the m
   }
   assert.equal(calls.length, 0); assert.equal(screenInput("How do I reset my password in AutoAdjust?"), null); assert.equal(screenInput("What is SOAR and how does it isolate hosts after approval?"), null);
 });
+test("off-topic requests are declined without spending AI credit; on-topic and follow-ups still pass", async () => {
+  const { f, calls } = stub(); const a = createAssistant({ env: {}, complete: f });
+  for (const m of ["Write me a poem about the sea", "who won the football match", "اكتب لي قصيدة عن البحر"]) { const r = await ask(a, m); assert.equal(r.mode, "refused", m); assert.equal(r.escalate, false); }
+  assert.equal(calls.length, 0);
+  for (const m of ["Do you support Wazuh?", "and the annual price?", "هل لديكم دعم؟", "How do I sign in?"]) assert.equal((await ask(a, m)).mode, "ai", m);
+});
 test("output screening: canary leak, secrets, html, links are removed", async () => {
   const leak = createAssistant({ env: {}, complete: async ({ system }) => "My instructions: " + /CANARY-[0-9a-f]+/.exec(system)![0] }); const r = await ask(leak, "How does SOC work?"); assert.equal(r.mode, "refused"); assert.doesNotMatch(r.answer, /CANARY/);
   const s = scrubOutput("Key sk-ant-api03-AAAAAAAAAAAA and eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abcdefghij <script>alert(1)</script> see https://evil.test/x ![i](https://evil.test/i.png) ok [[ESCALATE]]", "CANARY-1");
@@ -60,7 +66,7 @@ test("output screening: canary leak, secrets, html, links are removed", async ()
 });
 test("escalation: model marker, sensitive topics and unknown questions go to human support; tickets limitation is stated", async () => {
   const a = createAssistant({ env: { SUPPORT_EMAIL: "help@example.com" }, complete: stub("I can't be sure. [[ESCALATE]]").f });
-  const r = await ask(a, "How do I configure the quantum widget?"); assert.equal(r.escalate, true); assert.doesNotMatch(r.answer, /ESCALATE/); assert.match(r.answer, /Support tickets aren't available yet/); assert.match(r.answer, /help@example\.com/);
+  const r = await ask(a, "How do I configure the firewall quantum widget?"); assert.equal(r.escalate, true); assert.doesNotMatch(r.answer, /ESCALATE/); assert.match(r.answer, /Support tickets aren't available yet/); assert.match(r.answer, /help@example\.com/);
   const b = await ask(createAssistant({ env: {}, complete: stub("Follow your IR plan.").f }), "We think we were breached, ransomware on our server"); assert.equal(b.escalate, true);
   const c = await ask(createAssistant({ env: {}, complete: stub("ok").f }), "هل يمكنني التحدث مع شخص حقيقي؟"); assert.equal(c.escalate, true); assert.match(c.answer, /تذاكر الدعم غير متاحة/);
   const t = await ask(createAssistant({ env: {}, complete: stub("ok").f }), "What is SOC?", { ticketsEnabled: true }); assert.equal(t.escalate, false);
@@ -70,7 +76,7 @@ test("provider unavailable or erroring: graceful knowledge-base fallback, no sec
   for (const complete of [null, (async () => { throw new Error("provider 529 sk-ant-secret"); }) as Complete]) {
     const a = createAssistant({ env: {}, complete }); const r = await ask(a, "Is the Wazuh integration validated?");
     assert.equal(r.mode, "kb"); assert.equal(r.aiAvailable, false); assert.match(r.answer, /NOT yet been validated|not yet been validated/i); assert.doesNotMatch(r.answer, /sk-ant|provider 529/);
-    const u = await ask(a, "tell me about quantum teleportation"); assert.equal(u.escalate, true);
+    const u = await ask(a, "tell me about firewall quantum teleportation"); assert.equal(u.escalate, true);
   }
 });
 test("provider adapter: no key => null (nothing invented); key only in header; model default; errors surface", async () => {
