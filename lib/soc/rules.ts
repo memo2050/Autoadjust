@@ -1,6 +1,7 @@
 import type { Alert, MitreRef, Severity, SocEvent } from "./types";
 import { sevRank } from "./types";
 import { isPrivateIp, ms, uniq } from "./util";
+import { EXTRA_META, runExtra } from "./detect-extra";
 
 export type AlertDraft = Omit<Alert, "id" | "createdAt" | "source" | "incidentId">;
 export interface RuleMeta { id: string; name: string; severity: Severity; mitre: MitreRef[]; description: string }
@@ -240,9 +241,10 @@ const RULES: Rule[] = [
   } },
 ];
 
-export const RULES_META: RuleMeta[] = RULES.map((r) => r.meta);
+export const RULES_META: RuleMeta[] = [...RULES.map((r) => r.meta), ...EXTRA_META];
 export function runRules(events: SocEvent[]): AlertDraft[] {
   const out: AlertDraft[] = [];
   for (const r of RULES) out.push(...r.run(events));
+  out.push(...runExtra(events));
   return out;
 }

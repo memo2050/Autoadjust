@@ -25,6 +25,9 @@ import { analyzeNoc } from "../noc/ai-analyst";
 import { CATALOG, preview as xPreview } from "../noc/exec/catalog";
 import * as WZ from "./wazuh";
 import * as WC from "./wazuh-config";
+import { mitreCoverage } from "./mitre";
+import { soarPlan, playbookCatalog } from "./soar";
+import { elasticHitsToRaw } from "./elastic";
 import * as CH from "../noc/changes";
 import { authenticate, allowed, AuthError, identifyUser, type Principal } from "../tenant/auth";
 import { ScopedStore, TenantError } from "../tenant/scoped-store";
@@ -185,6 +188,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     }
 
     // Wazuh bridge endpoints (ingest role only, before the read gate)
+    if (a === "ingest" && b === "elastic" && m === "POST") { need("ingest"); scope("soc"); await rate(actor.name + ":elastic", 60); const body = await readJson(req); if (!Array.isArray(body?.hits)) throw new HttpError(400, "Send { hits: [...] } with Elasticsearch search hits."); const { events, skipped } = elasticHitsToRaw(body.hits); return json({ ...(await ingestWindows(store, { host: typeof body.host === "string" ? body.host : undefined, collector: "elastic", events }, "live", actor)), skipped }); }
     if (a === "ingest" && b === "wazuh" && m === "POST") { need("ingest"); scope("soc"); await rate(actor.name + ":wazuh", 60); const body = await readJson(req); try { return json(await WZ.ingestWazuh(store, body, { source: "live", mode: "bridge", actor })); } catch (e: any) { await WZ.recordWazuhError(store, e.message, "bridge", actor).catch(() => {}); throw e; } }
     if (a === "wazuh" && b === "cursor" && m === "GET") { need("ingest"); scope("soc"); const st = await WZ.wazuhStatus(store); return json({ cursor: st.cursor }); }
     if (a === "wazuh" && b === "bridge-error" && m === "POST") { need("ingest"); scope("soc"); await WZ.recordWazuhError(store, String((await readJson(req)).error ?? "unknown"), "bridge", actor); return json({ ok: true }); }
@@ -268,6 +272,9 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     if (a === "collectors" && m === "GET") return json(await collectors(store));
     if (a === "integrations" && m === "GET") return json({ integrations: await integrations(store, deps) });
     if (a === "rules" && m === "GET") return json(RULES_META);
+    if (a === "mitre" && m === "GET") { need("read"); return json(mitreCoverage()); }
+    if (a === "soar" && b === "playbooks" && m === "GET") { need("read"); return json({ playbooks: playbookCatalog() }); }
+    if (a === "soar" && b === "plan" && m === "GET") { need("read"); const al = await store.get<Alert>(T.alerts, String(u.searchParams.get("alert") ?? "")); if (!al) throw new HttpError(404, "Alert not found."); return json(soarPlan(al)); }
 
     if (a === "events" && m === "GET") {
       const where: Record<string, string | number> = {};
