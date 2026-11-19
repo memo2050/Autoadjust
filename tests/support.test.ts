@@ -58,5 +58,5 @@ test("widget is bilingual/RTL, uses no innerHTML, and demo blocks tickets", () =
   const d = readFileSync("public/demo.js", "utf8"); assert.match(d, /api\/support\/chat/); assert.doesNotMatch(d, /api\/support\/tickets/);
 });
 test("migration 0116 is server-only (RLS, no grants) and additive", () => {
-  const m = readFileSync("supabase/migrations/0116_support_tickets.sql", "utf8"); assert.match(m, /enable row level security/); assert.match(m, /revoke all on public\.support_tickets, public\.support_messages from anon, authenticated/); assert.doesNotMatch(m, /create policy|drop table|delete from public/i);
+  const m = readFileSync("supabase/migrations/0116_support_tickets.sql", "utf8"); assert.match(m, /enable row level security/); assert.match(m, /revoke all on public\.support_tickets, public\.support_messages from public, anon, authenticated/); assert.doesNotMatch(m, /create policy|drop table|delete from public/i);
 });

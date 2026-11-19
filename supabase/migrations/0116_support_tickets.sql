@@ -21,6 +21,7 @@ create table if not exists public.support_messages (
 );
 create index if not exists support_messages_ticket_idx on public.support_messages(ticket_id, created_at);
 alter table public.support_tickets enable row level security; alter table public.support_messages enable row level security;
-revoke all on public.support_tickets, public.support_messages from anon, authenticated;
+create index if not exists support_tickets_user_idx on public.support_tickets(user_id) where user_id is not null;
+revoke all on public.support_tickets, public.support_messages from public, anon, authenticated;
 insert into private.app_migrations (version, name) values ('0116', 'support_tickets') on conflict do nothing;
 commit;

@@ -109,3 +109,14 @@ test("chat endpoint: bad history shape tolerated, same-origin enforced, ticket f
 test("widget: history persisted in session, loading + suggestions + human escalation, textContent only", () => {
   const w = readFileSync("public/support-widget.js", "utf8"); assert.match(w, /sessionStorage/); assert.match(w, /thinking/); assert.match(w, /sug:/); assert.match(w, /humanNote/); assert.doesNotMatch(w, /innerHTML/); assert.match(w, /history: h/);
 });
+
+test("off-topic guard: creative/general requests refused in EN and AR, even after an in-scope turn", async () => {
+  const { f, calls } = stub(); const a = createAssistant({ env: {}, complete: f });
+  const bad = ["Write me a poem about the sea","tell me a joke","what's the weather today","give me a recipe for pasta","translate this to French","write me a python script to sort a list","اكتب لي قصيدة عن البحر","احكي لي نكتة","ما هو الطقس اليوم","اكتب لي برنامج بلغة بايثون","ترجم هذا النص"];
+  for (const m of bad) { const r = await ask(a, m); assert.equal(r.mode, "refused", m); }
+  const hist = [{ role: "user", content: "What is the Pro plan price?" }, { role: "assistant", content: "Pro is listed on the pricing page." }];
+  const r = await a.ask({ message: "now write me a poem about the sea", history: hist } as any); assert.equal(r.mode, "refused");
+  const r2 = await a.ask({ message: "اكتب لي قصيدة", history: hist } as any); assert.equal(r2.mode, "refused");
+  for (const m of ["What does the Pro plan include?", "How do I connect Wazuh?", "كم سعر الباقة؟", "Is UEBA available?"]) assert.notEqual((await ask(a, m)).mode, "refused", m);
+  assert.ok(calls.length >= 4);
+});
