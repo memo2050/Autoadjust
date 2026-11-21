@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// Staging smoke test. READ THE SAFETY RULES: it refuses to run unless STAGING_URL host contains "staging", "localhost" or "127.0.0.1" (never point it at production).
+// Staging smoke test. READ THE SAFETY RULES: it refuses to run unless STAGING_URL is localhost/127.0.0.1 or an exact hostname approved in scripts/lib/staging-target.mjs, over HTTPS (never point it at production).
 // Config (env, never committed): STAGING_URL, and EITHER SMOKE_TOKEN_A + SMOKE_TOKEN_B (two test users' access tokens)
 //   OR STAGING_SUPABASE_URL + STAGING_SUPABASE_ANON_KEY + SMOKE_EMAIL_A/SMOKE_PASSWORD_A + SMOKE_EMAIL_B/SMOKE_PASSWORD_B (two throwaway staging test users).
 // Output: one line per check (PASS/FAIL/SKIP) and a JSON summary on the last line. Secrets are never printed.
-const base = (process.env.STAGING_URL ?? "").replace(/\/$/, "");
-const host = (() => { try { return new URL(base).hostname; } catch { return ""; } })();
-if (!base || !/staging|^localhost$|^127\.0\.0\.1$/.test(host)) { console.error("Refusing to run: STAGING_URL must be a staging/localhost address."); process.exit(2); }
+import { checkStagingUrl } from "./lib/staging-target.mjs";
+const target = checkStagingUrl(process.env.STAGING_URL);
+if (!target.ok) { console.error("Refusing to run: STAGING_URL must be localhost or an approved staging host (" + target.reason + ")."); process.exit(2); }
+const base = target.base, host = target.host;
 const results = []; const rec = (name, ok, detail = "") => { results.push({ name, status: ok === null ? "SKIP" : ok ? "PASS" : "FAIL", detail }); console.log(`${ok === null ? "SKIP" : ok ? "PASS" : "FAIL"}  ${name}${detail ? "  - " + detail : ""}`); };
 const api = async (method, path, tok, body, headers = {}) => { const r = await fetch(`${base}/api/soc/${path}`, { method, headers: { "content-type": "application/json", ...(tok ? { authorization: "Bearer " + tok } : {}), ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }); let j = null; try { j = await r.json(); } catch {} return { status: r.status, body: j, headers: r.headers }; };
 async function login(kind) {

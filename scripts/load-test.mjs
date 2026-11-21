@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Basic load test. STAGING/LOCALHOST ONLY: refuses any other address. No secrets printed. Uses synthetic requests only.
+// Basic load test. STAGING/LOCALHOST ONLY: refuses any address that is not localhost or an exact host approved in scripts/lib/staging-target.mjs (HTTPS). No secrets printed. Uses synthetic requests only.
 // Env: STAGING_URL (required), LOAD_TOKEN (optional access token of a TEST user: adds authenticated GETs), LOAD_CONCURRENCY (default 10), LOAD_SECONDS (default 20), LOAD_MAX_RPS (default 200: hard cap),
 //      LOAD_P95_MS (default 1500) and LOAD_MAX_ERROR_PCT (default 1) = pass thresholds. Exit: 0 pass, 1 threshold missed, 2 refused/bad config.
-const base = (process.env.STAGING_URL ?? "").replace(/\/$/, ""); let host = ""; try { host = new URL(base).hostname; } catch {}
-if (!base || !/staging|^localhost$|^127\.0\.0\.1$/.test(host) || /prod/.test(host)) { console.error("Refusing to run: STAGING_URL must be a staging/localhost address."); process.exit(2); }
+import { checkStagingUrl } from "./lib/staging-target.mjs";
+const target = checkStagingUrl(process.env.STAGING_URL);
+if (!target.ok) { console.error("Refusing to run: STAGING_URL must be localhost or an approved staging host (" + target.reason + ")."); process.exit(2); }
+const base = target.base, host = target.host;
 const num = (k, d) => { const n = Number(process.env[k] ?? d); return Number.isFinite(n) && n > 0 ? n : d; };
 const conc = Math.min(num("LOAD_CONCURRENCY", 10), 50), secs = Math.min(num("LOAD_SECONDS", 20), 120), maxRps = num("LOAD_MAX_RPS", 200), p95Max = num("LOAD_P95_MS", 1500), errMax = num("LOAD_MAX_ERROR_PCT", 1);
 const tok = process.env.LOAD_TOKEN;
