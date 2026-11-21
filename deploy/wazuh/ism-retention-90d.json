@@ -1,0 +1,5 @@
+{ "policy": { "description": "Delete wazuh-alerts-* indices after 90 days (matches the disk sizing). PUT to /_plugins/_ism/policies/wazuh-alerts-90d, then add it to the index template.",
+  "default_state": "hot", "states": [
+    { "name": "hot", "actions": [], "transitions": [{ "state_name": "delete", "conditions": { "min_index_age": "90d" } }] },
+    { "name": "delete", "actions": [{ "delete": {} }], "transitions": [] } ],
+  "ism_template": [{ "index_patterns": ["wazuh-alerts-*"], "priority": 100 }] } }

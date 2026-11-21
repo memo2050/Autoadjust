@@ -35,3 +35,6 @@ Brute force, suspicious Windows logons, privilege escalation, suspicious PowerSh
 3. Agents appear with correct online/offline.
 4. A real failed-login burst creates a brute-force alert with evidence.
 5. "Send security event test" appears labelled TEST; "Remove test data" removes it.
+
+## Multi-tenant on one Wazuh server
+The bridge can be pinned to one tenant (`WAZUH_TENANT_GROUP`, `WAZUH_TENANT_LABEL`, `REQUIRE_TENANT_FILTER=1`). See `docs/WAZUH-SERVER.md` for what is proven, the remaining real-server gaps and the acceptance checklist, and `deploy/wazuh/` for the server kit.

@@ -159,3 +159,8 @@ test("agent enrollment commands: official packages, address required, injection 
   assert.equal((await call("GET", "wazuh/enrollment?os=windows&version=4.9.2", tok.b)).status, 200);
   assert.match(JSON.stringify(await J(await call("GET", "wazuh/enrollment?os=windows&version=4.9.2", tok.b))), /wazuh-b\.test/, "each organization gets its own manager address");
 });
+test("agent enrollment can put the agent into its tenant group (sanitized); without a group the commands are unchanged", async () => {
+  const withG = JSON.stringify(enrollment("windows", "wazuh-a.test", "4.9.2", "PC-01", "t-acme")), plain = JSON.stringify(enrollment("windows", "wazuh-a.test", "4.9.2", "PC-01"));
+  assert.match(withG, /WAZUH_AGENT_GROUP='t-acme'/); assert.ok(!plain.includes("WAZUH_AGENT_GROUP"));
+  const inj = JSON.stringify(enrollment("linux-deb", "wazuh-a.test", "4.9.2", undefined, "t-x';rm -rf /")); assert.ok(!inj.includes("rm -rf") && !inj.includes("';"), "group name sanitized");
+});

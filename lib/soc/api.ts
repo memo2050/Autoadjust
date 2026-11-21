@@ -265,7 +265,7 @@ export async function handleSoc(req: Request, path: string[], deps: Deps = {}): 
     if (a === "wazuh" && b === "config" && m === "DELETE") { need("approve"); return json(await WC.deleteWazuhConfig(store, actor)); }
     if (a === "wazuh" && b === "enrollment" && m === "GET") {
       need("read"); const cfg = await WC.getWazuhConfigPublic(store) as any, st = await WZ.wazuhStatus(store);
-      return json(WC.enrollment(u.searchParams.get("os") ?? "", String(cfg.agentManager ?? ""), u.searchParams.get("version") ?? String(st.manager ?? "").replace(/^v/i, "").match(/^\d+\.\d+\.\d+/)?.[0] ?? "", u.searchParams.get("name") ?? undefined));
+      return json(WC.enrollment(u.searchParams.get("os") ?? "", String(cfg.agentManager ?? ""), u.searchParams.get("version") ?? String(st.manager ?? "").replace(/^v/i, "").match(/^\d+\.\d+\.\d+/)?.[0] ?? "", u.searchParams.get("name") ?? undefined, u.searchParams.get("group") ?? undefined));
     }
     if (a === "wazuh" && b === "test" && c === "event" && m === "POST") { need("approve"); await rate(actor.name + ":wztest", 10); return json(await WZ.wazuhSelfTest(store, actor)); }
     if (a === "wazuh" && b === "test" && c === "cleanup" && m === "POST") { need("approve"); return json(await WZ.wazuhSelfTestCleanup(store, actor)); }

@@ -1,0 +1,23 @@
+# One instance per tenant and environment, e.g. wazuh-bridge@acme-staging.service reads /etc/autoadjust/wazuh-bridge/acme-staging.env (root:root, mode 600).
+[Unit]
+Description=AutoAdjust Wazuh bridge (%i, read-only, outbound only)
+After=network-online.target wazuh-manager.service wazuh-indexer.service
+Wants=network-online.target
+[Service]
+User=autoadjust-bridge
+EnvironmentFile=/etc/autoadjust/wazuh-bridge/%i.env
+Environment=REQUIRE_TENANT_FILTER=1 NODE_EXTRA_CA_CERTS=/etc/autoadjust/wazuh-root-ca.pem
+ExecStart=/usr/bin/node /opt/autoadjust/collector/wazuh/wazuh-bridge.mjs
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+CapabilityBoundingSet=
+[Install]
+WantedBy=multi-user.target
