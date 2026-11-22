@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotent: restyle the Spark landing page to the near-black / navy-glow look with a centered pill-less top nav.
+"""Idempotent: restyle the AutoAdjust landing page to the near-black / navy-glow look with a centered pill-less top nav.
 usage: apply-theme-night.py page.html [page2.html ...]"""
 import re, sys
 TOK = [("#1a1217","#050608"),("#261a1f","#0a0d14"),("#3f2b30","#1b2233"),("#f6ece4","#e9edf5"),("#b79a8f","#aab3c5"),
@@ -23,7 +23,7 @@ nav.nv .nr a.btn{color:var(--onac);padding:9px 18px;font-size:14px}
 @media(max-width:560px){nav a.l{display:inline}nav.nv .nr a:not(.btn){display:none}nav.nv .nl a{font-size:15px}}
 html{scroll-behavior:smooth}section[id],footer[id],header[id]{scroll-margin-top:84px}
 </style>'''
-NAV = ('<nav class="nv" id="top"><a class="logo" href="#top">Spark<span>.</span></a>'
+NAV = ('<nav class="nv" id="top"><a class="logo" href="#top">AutoAdjust<span>.</span></a>'
  '<div class="nl"><a class="l" href="#top">Home Page</a><a class="l" href="#soc">AI Agents</a><a class="l" href="#features">Portfolio</a>'
  '<a class="l" href="#how">Process</a><a class="l" href="#pricing">Pricing</a><a class="l" href="#contact">Contact us</a></div>'
  '<div class="nr"><a href="/studio">Ask AI</a><a class="btn" href="#builder">Try it</a></div></nav>')

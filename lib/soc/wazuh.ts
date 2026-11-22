@@ -87,7 +87,7 @@ export function mitreOf(a: WazuhAlert, cat: Category): { refs: MitreRef[]; infer
 const when = (a: WazuhAlert) => { const t = Date.parse(String(a["@timestamp"] ?? a.timestamp ?? "")); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 const flat = (o: any, p = "", out: Record<string, string> = {}, d = 0): Record<string, string> => { if (d > 3 || o == null) return out; for (const [k, v] of Object.entries(o)) { if (Object.keys(out).length >= 40) break; if (v && typeof v === "object" && !Array.isArray(v)) flat(v, p + k + ".", out, d + 1); else if (v != null && v !== "") out[p + k] = clip(Array.isArray(v) ? v.join(",") : String(v), 600); } return out; };
 
-/** Wazuh alert -> Spark event. Windows event-channel alerts become real Windows events so all existing Windows detections also run on them. */
+/** Wazuh alert -> AutoAdjust event. Windows event-channel alerts become real Windows events so all existing Windows detections also run on them. */
 export function alertToEvent(a: WazuhAlert, source: DataSource, collector = "wazuh"): SocEvent | { error: string } {
   const at = when(a); if (!at) return { error: "missing or invalid timestamp" };
   const host = String(a.agent?.name ?? a.manager?.name ?? "").trim(); if (!host) return { error: "missing agent name" };
@@ -109,7 +109,7 @@ export function alertToEvent(a: WazuhAlert, source: DataSource, collector = "waz
   return ev;
 }
 
-/** Wazuh rule hits at or above the minimum level become Spark alerts, grouped per rule, host and source. Nothing is invented: every draft cites the stored events. */
+/** Wazuh rule hits at or above the minimum level become AutoAdjust alerts, grouped per rule, host and source. Nothing is invented: every draft cites the stored events. */
 export function alertsToDrafts(items: { a: WazuhAlert; ev: SocEvent }[], minLevel: number): AlertDraft[] {
   const groups = new Map<string, { a: WazuhAlert; ev: SocEvent[]; cat: Category; sens: boolean }>();
   for (const { a, ev } of items) {
@@ -126,7 +126,7 @@ export function alertsToDrafts(items: { a: WazuhAlert; ev: SocEvent }[], minLeve
     if (g.cat === "fim") why.push(`File ${g.a.syscheck?.path} was ${g.a.syscheck?.event ?? "changed"}${g.sens ? "; the path is a sensitive system location, so severity was raised to high" : ""}. Hash after change: ${g.a.syscheck?.sha256_after ?? "not reported"}.`);
     if (ips.length) why.push(`Source address(es): ${ips.slice(0, 5).join(", ")}.`); if (users.length) why.push(`Account(s): ${users.slice(0, 5).join(", ")}.`);
     why.push(refs.length ? (inferred ? `MITRE mapping (${refs[0].id}) is inferred from the detection category because Wazuh did not supply one.` : `MITRE ATT&CK mapping comes from the Wazuh rule.`) : "Wazuh supplied no MITRE mapping for this rule.");
-    why.push("This is a Wazuh rule detection that Spark has stored and correlated; Spark did not independently verify it.");
+    why.push("This is a Wazuh rule detection that AutoAdjust has stored and correlated; AutoAdjust did not independently verify it.");
     return { ruleId: `WZH-${g.a.rule?.id ?? "0"}`, key, title: `${CATEGORY_LABEL[g.cat]}: ${clip(g.a.rule?.description ?? "Wazuh alert", 120)}${g.ev.length > 1 ? ` (×${g.ev.length})` : ""}`, severity: sev, confidence: lv >= 12 ? 0.85 : lv >= 10 ? 0.75 : 0.6, mitre: refs,
       assetId: e0.assetId, host: e0.host, eventIds: g.ev.map((e) => e.id).slice(0, 200), firstSeen: first, lastSeen: last, reasoning: why.join(" "), entities: { users, ips } } as AlertDraft;
   });

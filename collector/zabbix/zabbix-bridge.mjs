@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Spark NOC <-> Zabbix bridge. Run it INSIDE your network (for example on the Ubuntu VM that hosts Zabbix).
+// AutoAdjust NOC <-> Zabbix bridge. Run it INSIDE your network (for example on the Ubuntu VM that hosts Zabbix).
 // It makes OUTBOUND HTTPS calls only: no inbound port to your network is needed.
-//   1. reads hosts / items / problems from the local Zabbix API and pushes them to the Spark backend
+//   1. reads hosts / items / problems from the local Zabbix API and pushes them to the AutoAdjust backend
 //   2. asks the backend for approved executions, runs the registered Zabbix script, and reports the real result
 // Env: ZABBIX_URL (http://localhost), ZABBIX_TOKEN (API token), SPARK_URL (https://your-site), SPARK_INGEST_TOKEN, SPARK_SOURCE_ID (id of a "push" source), INTERVAL_SEC (60)
 // Needs Node 18+. No dependencies.
@@ -21,4 +21,4 @@ async function executions() {
   }
 }
 async function tick() { try { await push(); } catch (e) { log("push failed:", e.message); } try { await executions(); } catch (e) { log("executions failed:", e.message); } }
-log("Spark bridge started; interval", EVERY / 1000, "s"); tick(); setInterval(tick, EVERY);
+log("AutoAdjust bridge started; interval", EVERY / 1000, "s"); tick(); setInterval(tick, EVERY);

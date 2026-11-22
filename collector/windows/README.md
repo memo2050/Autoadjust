@@ -1,6 +1,6 @@
 # Windows collector
 
-Sends real Windows events to your Spark SOC. Read-only: it never changes the computer.
+Sends real Windows events to your AutoAdjust SOC. Read-only: it never changes the computer.
 
 1. Use a Windows computer you own or are authorized to monitor.
 2. Turn on the auditing you want (otherwise the events do not exist): Local Security Policy, Advanced Audit Policy: Logon/Logoff, Account Management, Detailed Tracking (Process Creation), Policy Change. For command lines, also enable "Include command line in process creation events".

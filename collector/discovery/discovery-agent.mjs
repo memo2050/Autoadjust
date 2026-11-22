@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Spark discovery agent. Run it INSIDE the network you are authorized to scan (a Linux VM or Raspberry Pi on that LAN).
-// OUTBOUND HTTPS only: it polls Spark for scan jobs an admin approved, scans only the approved targets, and reports results.
-// SNMP community strings / SSH passwords live ONLY in this machine's environment or files. They are never sent to Spark.
+// AutoAdjust discovery agent. Run it INSIDE the network you are authorized to scan (a Linux VM or Raspberry Pi on that LAN).
+// OUTBOUND HTTPS only: it polls AutoAdjust for scan jobs an admin approved, scans only the approved targets, and reports results.
+// SNMP community strings / SSH passwords live ONLY in this machine's environment or files. They are never sent to AutoAdjust.
 // Env: SPARK_URL, SPARK_INGEST_TOKEN, AGENT_NAME (default hostname), POLL_SEC (10)
 //      SNMP_COMMUNITY or SNMP_V3_ARGS (extra args for snmpget/snmpwalk, e.g. "-v3 -l authPriv -u user -a SHA -A pass -x AES -X pass")
 //      CONFIG_EXECUTOR = path to an executable that applies config changes (see docs/NOC-TOPOLOGY.md). If unset, approved changes are NOT applied and are reported failed.
@@ -49,5 +49,5 @@ async function changes() { const { changes: list } = await spark("noc/changes/pe
   try { if (!E.CONFIG_EXECUTOR) throw new Error("No CONFIG_EXECUTOR is configured on this agent, so nothing was changed on the device."); const b = await exec(E.CONFIG_EXECUTOR, { action: "backup", device: ch.device });
     await spark(`noc/changes/${ch.id}/backup`, "POST", { config: b }); await exec(E.CONFIG_EXECUTOR, { action: "apply", device: ch.device, proposed: ch.proposed }); const run2 = await exec(E.CONFIG_EXECUTOR, { action: "readback", device: ch.device });
     await spark(`noc/changes/${ch.id}/result`, "POST", { ok: true, runningConfig: run2 }); } catch (e) { await spark(`noc/changes/${ch.id}/result`, "POST", { ok: false, error: String(e.message).slice(0, 300) }).catch(() => {}); } } }
-log("Spark discovery agent", NAME, "polling", S, "every", POLL / 1000, "s"); let busy = false;
+log("AutoAdjust discovery agent", NAME, "polling", S, "every", POLL / 1000, "s"); let busy = false;
 setInterval(async () => { if (busy) return; busy = true; try { await scans(); } catch (e) { log("poll failed:", e.message); } try { await changes(); } catch (e) { log("changes poll failed:", e.message); } busy = false; }, POLL);

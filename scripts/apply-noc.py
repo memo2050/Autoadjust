@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Idempotent. Adds the NOC page and the page router (home / SOC / NOC) to Spark landing page copies.
+"""Idempotent. Adds the NOC page and the page router (home / SOC / NOC) to AutoAdjust landing page copies.
 usage: apply-noc.py page.html [page2.html ...]   (run apply-theme-night.py first)"""
 import re, sys, os
 D = os.path.dirname(os.path.abspath(__file__))
 rd = lambda n: open(os.path.join(D, n), encoding="utf-8").read()
-NAV = ('<nav class="nv" id="top"><a class="logo" href="#/home">Spark<span>.</span></a>'
+NAV = ('<nav class="nv" id="top"><a class="logo" href="#/home">AutoAdjust<span>.</span></a>'
  '<div class="nl"><a class="l" data-nav="home" href="#/home">Home Page</a><a class="l" data-nav="soc" href="#/soc">SOC AI Agents</a><a class="l" data-nav="noc" href="#/noc">NOC AI Agents</a>'
  '<a class="l" href="#features">Portfolio</a><a class="l" href="#how">Process</a><a class="l" href="#pricing">Pricing</a><a class="l" href="#contact">Contact us</a></div>'
  '<div class="nr"><a href="/studio">Ask AI</a><a class="btn" href="#builder">Try it</a></div></nav>')
@@ -15,7 +15,7 @@ nav.nv{grid-template-columns:auto 1fr auto}nav.nv .nr,nav.nv .nr a{white-space:n
 </style>'''
 ROUTER_EARLY = '<script id="router-early">(function(){var h=(location.hash||"").replace(/^#\\/?/,""),p=(location.pathname||"").replace(/\\/+$/,"").split("/").pop(),v=h==="soc"||h==="doc"?"soc":h==="noc"?"noc":h==="home"||h==="top"?"home":h?"home":p==="soc"?"soc":p==="noc"?"noc":"home";document.body.setAttribute("data-view",v)})();</script>'
 ROUTER = '''<script id="router">(function(){
-var T0=document.title,TT={soc:"SOC AI Agents | Spark",noc:"NOC AI Agents | Spark"};
+var T0=document.title,TT={soc:"SOC AI Agents | AutoAdjust",noc:"NOC AI Agents | AutoAdjust"};
 function parse(){var h=(location.hash||"").replace(/^#\\/?/,""),p=(location.pathname||"").replace(/\\/+$/,"").split("/").pop(),def=p==="soc"?"soc":p==="noc"?"noc":"home";
  if(h==="soc"||h==="doc")return"soc";if(h==="noc")return"noc";if(h==="home"||h==="top")return"home";if(!h)return def;
  var el=document.getElementById(h);if(!el)return def==="home"?(document.body.getAttribute("data-view")||"home"):def;var pg=el.closest("[data-page]");return pg?pg.getAttribute("data-page"):(document.body.getAttribute("data-view")||def)}

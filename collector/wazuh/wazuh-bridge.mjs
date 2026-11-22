@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Spark <- Wazuh bridge. Run it on a machine that can reach your Wazuh Manager API (55000) and Wazuh Indexer (9200).
-// OUTBOUND HTTPS to Spark only. Wazuh credentials stay in THIS machine's environment and are never sent to Spark.
+// AutoAdjust <- Wazuh bridge. Run it on a machine that can reach your Wazuh Manager API (55000) and Wazuh Indexer (9200).
+// OUTBOUND HTTPS to AutoAdjust only. Wazuh credentials stay in THIS machine's environment and are never sent to AutoAdjust.
 // READ-ONLY: it logs in, lists agents, and searches alerts. It never calls active-response, restart, delete or any write endpoint.
 // Env: SPARK_URL, SPARK_INGEST_TOKEN, WAZUH_API_URL, WAZUH_API_USER, WAZUH_API_PASSWORD, WAZUH_INDEXER_URL, WAZUH_INDEXER_USER, WAZUH_INDEXER_PASSWORD
 //      optional: WAZUH_INDEX (wazuh-alerts-*), POLL_SEC (30), BRIDGE_NAME, NODE_EXTRA_CA_CERTS=/path/to/wazuh-root-ca.pem (for a private CA; TLS verification stays ON)
@@ -10,7 +10,7 @@ const SPARK = need("SPARK_URL").replace(/\/+$/, ""), TOK = need("SPARK_INGEST_TO
 const AU = need("WAZUH_API_USER"), AP = need("WAZUH_API_PASSWORD"), IU = need("WAZUH_INDEXER_USER"), IP = need("WAZUH_INDEXER_PASSWORD");
 const INDEX = E.WAZUH_INDEX || "wazuh-alerts-*", POLL = Math.max(10, Number(E.POLL_SEC) || 30) * 1000, NAME = E.BRIDGE_NAME || os.hostname(), VER = "1.0";
 const log = (...a) => console.log(new Date().toISOString(), ...a), b64 = (u, p) => "Basic " + Buffer.from(`${u}:${p}`).toString("base64");
-const spark = async (path, method = "GET", body) => { const r = await fetch(`${SPARK}/api/soc/${path}`, { method, headers: { Authorization: "Bearer " + TOK, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(`Spark ${r.status}: ${j.error ?? ""}`); return j; };
+const spark = async (path, method = "GET", body) => { const r = await fetch(`${SPARK}/api/soc/${path}`, { method, headers: { Authorization: "Bearer " + TOK, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(`AutoAdjust ${r.status}: ${j.error ?? ""}`); return j; };
 const hit = async (url, init, what) => { let r; try { r = await fetch(url, { ...init, signal: AbortSignal.timeout(20000) }); } catch (e) { throw new Error(`${what}: cannot reach Wazuh (${e?.cause?.code ?? e.message})`); } if (r.status === 401 || r.status === 403) throw new Error(`${what}: credentials rejected (HTTP ${r.status})`); if (!r.ok) throw new Error(`${what}: HTTP ${r.status}`); return r; };
 let jwt = ""; const login = async () => { jwt = (await (await hit(`${API}/security/user/authenticate?raw=true`, { method: "POST", headers: { Authorization: b64(AU, AP) } }, "Manager login")).text()).trim(); };
 const api = async (path, what) => { if (!jwt) await login(); try { return await (await hit(API + path, { headers: { Authorization: "Bearer " + jwt } }, what)).json(); } catch (e) { if (/rejected/.test(e.message)) { await login(); return (await hit(API + path, { headers: { Authorization: "Bearer " + jwt } }, what)).json(); } throw e; } };
@@ -26,7 +26,7 @@ async function health() {
     await step("Endpoint agents", async () => `${((await api("/agents?limit=1", "Agents"))?.data?.total_affected_items ?? "?")} agent(s) registered`);
   }
   if (await step("Indexer reachable", async () => { const h = await (await idx("/_cluster/health")).json(); return `Cluster ${h.status}`; })) await step("Alerts index", async () => { const h = await search({ size: 1, sort: [{ "@timestamp": "desc" }], _source: ["@timestamp"] }); if (!h.length) throw new Error("No alerts in the index yet."); return `Newest alert ${h[0]._source["@timestamp"]}`; });
-  await spark("wazuh/bridge-test", "POST", { ok: steps.every((s) => s.ok), steps }).catch((e) => log("could not report health to Spark:", e.message)); log("health check:", steps.map((s) => `${s.ok ? "OK" : "FAIL"} ${s.name}`).join("; ")); return steps.every((s) => s.ok);
+  await spark("wazuh/bridge-test", "POST", { ok: steps.every((s) => s.ok), steps }).catch((e) => log("could not report health to AutoAdjust:", e.message)); log("health check:", steps.map((s) => `${s.ok ? "OK" : "FAIL"} ${s.name}`).join("; ")); return steps.every((s) => s.ok);
 }
 async function cycle() {
   const { cursor } = await spark("wazuh/cursor"); let since = cursor ?? null, alerts = [];
@@ -35,6 +35,6 @@ async function cycle() {
   const info = (await api("/manager/info", "Manager info"))?.data?.affected_items?.[0] ?? {};
   for (let i = 0; i < Math.max(1, Math.ceil(alerts.length / 1000)); i++) { const r = await spark("ingest/wazuh", "POST", { agents: i === 0 ? agents : [], alerts: alerts.slice(i * 1000, (i + 1) * 1000), manager: { version: info.version, name: info.name }, bridge: { name: NAME, version: VER } }); log(`sent ${alerts.slice(i * 1000, (i + 1) * 1000).length} alert(s): accepted ${r.accepted}, new detections ${r.newAlerts}, rejected ${r.rejected?.length ?? 0}`); }
 }
-log(`Spark-Wazuh bridge ${NAME} (read-only) -> ${SPARK}, every ${POLL / 1000}s`); let n = 0, busy = false;
+log(`AutoAdjust-Wazuh bridge ${NAME} (read-only) -> ${SPARK}, every ${POLL / 1000}s`); let n = 0, busy = false;
 const tick = async () => { if (busy) return; busy = true; try { if (n++ % 120 === 0) await health(); await cycle(); } catch (e) { log("sync failed:", e.message); await spark("wazuh/bridge-error", "POST", { error: e.message }).catch(() => {}); } busy = false; };
 tick(); setInterval(tick, POLL);

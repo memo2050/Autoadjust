@@ -53,7 +53,7 @@ export async function resolveWazuhCfg(store: Store, env: Record<string, string |
 }
 export async function minLevelFor(store: Store): Promise<number> { const r = await store.get<StoredWazuh>(T.meta, ID); return r ? r.data.minLevel : Number(process.env.WAZUH_MIN_LEVEL ?? 7) || 7; }
 
-// ---- agent enrollment (official Wazuh agent packages; Spark never installs anything itself) ----
+// ---- agent enrollment (official Wazuh agent packages; AutoAdjust never installs anything itself) ----
 export function enrollment(os: string, manager: string, version: string, agentName?: string) {
   if (!/^[A-Za-z0-9.-]+$/.test(manager)) throw new HttpError(400, "Set the agent connection address (agentManager) in the Wazuh connection first.");
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new HttpError(400, "version must look like 4.9.2 and should match your Wazuh manager version.");

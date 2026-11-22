@@ -11,9 +11,9 @@ export interface EnrichedAction extends SocAction {
   ageMinutes: number; byAgent: boolean;
 }
 const BASE: Record<string, { level: "high" | "medium" | "low"; why: string; ifApproved: string }> = {
-  isolate_host: { level: "high", why: "Takes the computer off the network; users and services on it lose connectivity.", ifApproved: "A human must isolate the host (Spark does not). Users on it will be cut off." },
+  isolate_host: { level: "high", why: "Takes the computer off the network; users and services on it lose connectivity.", ifApproved: "A human must isolate the host (AutoAdjust does not). Users on it will be cut off." },
   disable_account: { level: "high", why: "Locks a user out; may stop services that run under the account.", ifApproved: "A human must disable the account. Check that no service depends on it." },
-  block_ip: { level: "medium", why: "Blocks traffic from an address; a wrong or shared address can cut off legitimate users.", ifApproved: "A human must add the firewall rule (Spark does not)." },
+  block_ip: { level: "medium", why: "Blocks traffic from an address; a wrong or shared address can cut off legitimate users.", ifApproved: "A human must add the firewall rule (AutoAdjust does not)." },
   reset_password: { level: "medium", why: "Forces the user to re-authenticate; may break saved sessions and service logons.", ifApproved: "A human must reset the password." },
   patch: { level: "medium", why: "Changes software on a production system; may need a reboot or cause regressions.", ifApproved: "A human must schedule and apply the patch." },
   request_scan: { level: "low", why: "Active scanning generates traffic against the target; low risk if the asset is authorized.", ifApproved: "A human must run the scan." },

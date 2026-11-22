@@ -18,7 +18,7 @@
 <section class="npn n6" aria-labelledby="noc-h-apv"><h3 id="noc-h-apv">Change approvals</h3><div id="noc-apv"></div><h4>Audit log (this browser)</h4><div id="noc-audit" class="nlog"></div></section>
 <section class="npn n12" aria-labelledby="noc-h-sh"><h3 id="noc-h-sh">NOC + SOC collaboration: shared incident workflow</h3><div id="noc-shared"></div></section>
 <section class="npn n12" aria-labelledby="noc-h-int"><h3 id="noc-h-int">Data sources and integration health</h3><p class="nmut" style="margin:0 0 6px">Nothing is marked connected unless telemetry has really arrived.</p><div id="noc-integ"></div>
-<details class="nguide"><summary>How to connect real telemetry</summary><ol><li>Deploy the Spark backend (see the SOC setup notes) and run <code>supabase/005_noc.sql</code>.</li><li>From any monitoring tool or script, POST JSON to <code>/api/soc/noc/telemetry</code> with the ingest token as a Bearer token:</li></ol><pre>{ "source": "my-poller",
+<details class="nguide"><summary>How to connect real telemetry</summary><ol><li>Deploy the AutoAdjust backend (see the SOC setup notes) and run <code>supabase/005_noc.sql</code>.</li><li>From any monitoring tool or script, POST JSON to <code>/api/soc/noc/telemetry</code> with the ingest token as a Bearer token:</li></ol><pre>{ "source": "my-poller",
   "devices": [
     { "name": "CORE-SW-01", "type": "switch", "ip": "10.0.0.3", "up": true,
       "metrics": { "latencyMs": 1, "lossPct": 0, "cpu": 33, "mem": 40, "bwInMbps": 420, "bwOutMbps": 380, "bwCapMbps": 10000 },

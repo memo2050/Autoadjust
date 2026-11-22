@@ -1,4 +1,4 @@
-// Shared types for the Spark SOC module. Pure TypeScript, no framework imports.
+// Shared types for the AutoAdjust SOC module. Pure TypeScript, no framework imports.
 
 /** Where a row came from. Shown as a badge everywhere in the UI. */
 export type DataSource = "live" | "imported" | "demo";

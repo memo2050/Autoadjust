@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Read-only collector: sends recent Windows Security, System and Defender events to your Spark SOC server.
+  Read-only collector: sends recent Windows Security, System and Defender events to your AutoAdjust SOC server.
 
 .DESCRIPTION
   Run it on a Windows computer that you own or are authorized to monitor, in an elevated PowerShell (reading the Security log needs admin rights).
@@ -8,7 +8,7 @@
   It remembers the last record it sent per log in a small state file, so each run sends only new events.
   NOTE: this script was written without access to a Windows machine and has not been run by its author. Test it with -DryRun first.
 
-.PARAMETER Url      Base URL of your Spark site, e.g. https://soc.example.com
+.PARAMETER Url      Base URL of your AutoAdjust site, e.g. https://soc.example.com
 .PARAMETER Token    The value of SOC_INGEST_TOKEN configured on the server.
 .PARAMETER Hours    First run only: how many hours back to read (default 24).
 .PARAMETER Loop     Keep running and send new events every -IntervalSeconds seconds.

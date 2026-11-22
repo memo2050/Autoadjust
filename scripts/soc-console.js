@@ -1,5 +1,5 @@
 /* ---------- Agent investigation consoles (one per SOC role) ----------
-   Each agent runs its OWN analysis over the data in view (sample or connected) using the Spark rule engine.
+   Each agent runs its OWN analysis over the data in view (sample or connected) using the AutoAdjust rule engine.
    The run is paced so the person can watch it. It is a rule-based analysis, not a live scan of any system,
    and it never carries out a response action: containment items are only recorded as requests for approval. */
 var STG=["User request","AI agent","Security analysis","Threat detection","Investigation","Report"];
@@ -59,7 +59,7 @@ function bAnalyst(task,ctx){var R=mk(),t=task.toLowerCase(),focus=/phish|e-?mail
  }
  if(focus==="phishing"){
   var off=ev.filter(function(e){return e.eventId===4688&&/(winword|excel|outlook|powerpnt|onenote|acrord32)/i.test(e.parentProcess||"")&&/(powershell|cmd\.exe|wscript|cscript|mshta|rundll32|regsvr32)/i.test((e.process||"")+" "+(e.commandLine||""))});
-  R.L[2].push("No mail gateway or user-reported-phish source is connected to Spark, so mail content cannot be examined.","Checked endpoint process chains instead: "+off.length+" case(s) of Office or mail clients launching script hosts.");
+  R.L[2].push("No mail gateway or user-reported-phish source is connected to AutoAdjust, so mail content cannot be examined.","Checked endpoint process chains instead: "+off.length+" case(s) of Office or mail clients launching script hosts.");
   off.slice(0,4).forEach(function(e){R.findings.push({sev:"high",t:(e.parentProcess||"Office")+" launched "+(e.process||"a script host")+" on "+e.host+". This is a common result of opening a malicious attachment.",ev:[e.id]})});
   R.limits.push("Phishing email itself cannot be analyzed: no mail source is connected.");
   R.L[4].push("Mapped to ATT&CK T1566 (Phishing) / T1204 (User Execution) as hypotheses.");
@@ -96,7 +96,7 @@ function bEngineer(task,ctx){var R=mk(),t=task.toLowerCase(),V=vulnsAll(),al=(S.
  plan.items.slice(0,3).forEach(function(i){R.recs.push({p:i.topPriority>=80?"P1":"P2",t:"Patch / fix "+i.host+": "+i.steps[0].solution.slice(0,120),type:"patch",target:i.host,dis:true})});
  exp.filter(function(x){return x.p===445||x.p===3389}).slice(0,2).forEach(function(x){R.recs.push({p:"P2",t:"Change the firewall rule that exposes "+x.n+" on "+x.h+" (restrict to management addresses).",type:"other",target:x.h,dis:true})});
  R.sev=R.findings.length?maxSev(R.findings):"low";R.head=plan.totals.findings+" open finding(s) on "+plan.totals.hosts+" host(s); top severity "+R.sev.toUpperCase()+".";
- R.limits.push("No firewall or device configuration was read. The service list comes only from scan findings.","Configuration changes are listed as requests; Spark does not apply them.");
+ R.limits.push("No firewall or device configuration was read. The service list comes only from scan findings.","Configuration changes are listed as requests; AutoAdjust does not apply them.");
  R.mdTitle="Security configuration and remediation report";return R}
 /* ---- hunter ---- */
 function bHunter(task,ctx){var R=mk(),ev=evs(),t=task.toLowerCase();
@@ -143,7 +143,7 @@ async function bResponder(task,ctx){var R=mk(),inc=(S.data&&S.data.activeInciden
  var pb=E.playbookFor(i,al.map(function(a){return a.ruleId}));
  pb.forEach(function(ph){ph.steps.forEach(function(s){var a=s.needsApproval?actFor(s.id,i,al):null;R.recs.push({p:/Contain/.test(ph.phase)?"P1":/Eradicate/.test(ph.phase)?"P2":"P3",t:"["+ph.phase.replace(/^\d \u00b7 /,"")+"] "+s.text,type:a?a.type:(s.needsApproval?"other":""),target:a?a.target:(s.needsApproval?i.host:""),dis:!!s.needsApproval,desc:a?a.description:s.text,inc:i.id})})});
  R.sev=i.severity;R.head="Incident "+i.id.slice(0,12)+": "+i.severity.toUpperCase()+" / "+pr+", stage "+names[Math.min(cur,4)]+".";
- R.limits.push("Containment steps are suggestions. Spark does not isolate hosts, block addresses, reset passwords or change firewalls.");R.mdTitle="Incident response report";
+ R.limits.push("Containment steps are suggestions. AutoAdjust does not isolate hosts, block addresses, reset passwords or change firewalls.");R.mdTitle="Incident response report";
  R.md=E.incidentReportMd({incident:Object.assign({},i,{status:st}),timeline:d.timeline,actions:(d.actions||[]).concat(L.drafts.filter(function(x){return x.incidentId===i.id})),notes:(L.notes[i.id]||[]).map(function(n){return new Date(n.t).toISOString()+" "+n.text})});return R}
 /* ---- siem ---- */
 function bSiem(task,ctx){var R=mk(),ev=evs(),sec=evSec(),t=task;
@@ -167,14 +167,14 @@ function bSiem(task,ctx){var R=mk(),ev=evs(),sec=evSec(),t=task;
  var ps="Get-WinEvent -FilterHashtable @{LogName='Security'; Id="+ids.join(",")+"; StartTime=(Get-Date).AddHours(-24)} |\n  Group-Object { $_.Properties[19].Value } | Where-Object Count -ge 3 | Sort-Object Count -Descending";
  var es='event.code:('+ids.join(" or ")+")"+cond(function(x){return' and source.ip:"'+x+'"'},function(x){return' and user.name:"'+x+'"'},function(x){return' and host.name:"'+x+'"'}).join("");
  R.extra.push({title:"Generated queries (NOT executed; test in your SIEM first)",code:"# Splunk SPL\n"+spl+"\n\n# Microsoft Sentinel / Log Analytics KQL\n"+kql+"\n\n# PowerShell on a Windows host\n"+ps+"\n\n# Elastic (KQL)\n"+es});
- if(lx||fw||nw)R.extra.push({title:"Starter queries for sources Spark does not collect (NOT executed)",code:(lx?'# Linux sshd (Splunk)\nindex=linux sourcetype=linux_secure "Failed password" | rex "from (?<src>\\d+\\.\\d+\\.\\d+\\.\\d+)" | stats count by src, user | where count>=5\n\n':"")+(fw?'# Firewall denies (Splunk, generic)\nindex=firewall action=blocked | stats count by src_ip, dest_port | sort - count | head 20\n\n':"")+(nw?'# DNS / network (KQL, generic)\nDnsEvents | summarize Count=count() by ClientIP, Name | top 20 by Count':"")});
+ if(lx||fw||nw)R.extra.push({title:"Starter queries for sources AutoAdjust does not collect (NOT executed)",code:(lx?'# Linux sshd (Splunk)\nindex=linux sourcetype=linux_secure "Failed password" | rex "from (?<src>\\d+\\.\\d+\\.\\d+\\.\\d+)" | stats count by src, user | where count>=5\n\n':"")+(fw?'# Firewall denies (Splunk, generic)\nindex=firewall action=blocked | stats count by src_ip, dest_port | sort - count | head 20\n\n':"")+(nw?'# DNS / network (KQL, generic)\nDnsEvents | summarize Count=count() by ClientIP, Name | top 20 by Count':"")});
  var ig=S.integ||[],on=ig.filter(function(x){return/healthy|connected|imported/.test(x.status)});
- R.L[4].push("Source coverage: "+on.length+" of "+ig.length+" integration(s) report data.",lx||fw||nw?"Linux, firewall and network logs: no collector in Spark, so only generated queries are provided.":"Windows Security log is the only parsed source.");
+ R.L[4].push("Source coverage: "+on.length+" of "+ig.length+" integration(s) report data.",lx||fw||nw?"Linux, firewall and network logs: no collector in AutoAdjust, so only generated queries are provided.":"Windows Security log is the only parsed source.");
  R.findings.push({sev:"low",t:"Log source coverage: "+(ig.length?ig.map(function(x){return x.name+" ("+x.status+")"}).join(", "):"integration list unavailable")+". Linux, firewall and network logs have no collector.",ev:[]});
  R.findings.sort(function(a,b){return SRANK[b.sev]-SRANK[a.sev]});R.sev=maxSev(R.findings);
  R.recs.push({p:"P3",t:"Run the generated query in your SIEM to confirm the result on the full dataset.",dis:false},{p:"P3",t:"Add a detection rule for 5+ failed logons per source in 10 minutes, and enable 4688 command-line auditing.",dis:false});
  R.head=r.total+" matching event(s); "+rep.length+" repeated-failure pair(s).";
- R.limits.push("Results come from events stored in Spark, not from your SIEM. Queries are generated text and were not run anywhere.");R.mdTitle="SIEM log analysis report";return R}
+ R.limits.push("Results come from events stored in AutoAdjust, not from your SIEM. Queries are generated text and were not run anywhere.");R.mdTitle="SIEM log analysis report";return R}
 /* ---- ciso ---- */
 function bCiso(task,ctx){var R=mk(),d=S.data,ei=execInput(),risks=E.topRisks(ei,5),act=d.activeIncidents,crit=act.filter(function(i){return i.severity==="critical"}).length,vc=d.vulnCounts||{},hi=(vc.critical||0)+(vc.high||0);
  R.L[1].push("CISO advisor accepted the task.","Plan: summarize posture, rank business risks, list KPIs and the decisions leadership must make.");
@@ -191,14 +191,14 @@ function bCiso(task,ctx){var R=mk(),d=S.data,ei=execInput(),risks=E.topRisks(ei,
  if(hi)R.recs.push({p:"P2",t:"Fund and schedule remediation of "+hi+" critical/high findings with a deadline per host owner.",dis:false});
  R.recs.push({p:"P3",t:"Strategic: extend log coverage (Linux, firewall, network), baseline MFA on remote access, test restores of offline backups.",dis:false});
  R.sev=R.findings.length?maxSev(R.findings):"low";R.head="Posture "+(d.posture==null?"n/a":d.posture+"/100")+"; "+act.length+" active incident(s); "+risks.length+" top risk(s).";
- R.limits.push("Counts cover only systems connected to Spark. There is no trend data, no financial impact estimate and no compliance mapping.");R.mdTitle="Executive security briefing";R.md=E.execSummaryMd(ei);return R}
+ R.limits.push("Counts cover only systems connected to AutoAdjust. There is no trend data, no financial impact estimate and no compliance mapping.");R.mdTitle="Executive security briefing";R.md=E.execSummaryMd(ei);return R}
 var BUILD={analyst:bAnalyst,engineer:bEngineer,hunter:bHunter,responder:bResponder,siem:bSiem,ciso:bCiso};
 function mdOf(role,a){var R=a.res,P=ROLES[role],o=["# "+R.mdTitle,"",a.dl.text,"","- **Agent:** "+P.n,"- **Task:** "+a.task,"- **Result:** "+R.head,"- **Severity:** "+R.sev,"- **Run at:** "+new Date(a.at).toISOString(),""];
  if(R.md&&role!=="analyst"&&role!=="engineer"){o.push(R.md,"")}
  o.push("## Findings","",R.findings.length?R.findings.map(function(f,i){return(i+1)+". ["+f.sev.toUpperCase()+"] "+f.t+((f.ev||[]).length?" (events: "+f.ev.join(", ")+")":"")}).join("\n"):"No findings.","");
  if(R.table){o.push("## "+R.table.title,"","| "+R.table.cols.join(" | ")+" |","|"+R.table.cols.map(function(){return" --- |"}).join(""));R.table.rows.forEach(function(r){o.push("| "+r.map(function(c){return String(c).replace(/<[^>]+>/g,"").replace(/\|/g,"/")}).join(" | ")+" |")});o.push("")}
  R.extra.forEach(function(x){o.push("## "+x.title,"",x.code?x.code:x.text,"")});
- o.push("## Recommended next steps (none executed)","",R.recs.map(function(r){return"- ["+r.p+"] "+r.t+(r.dis?" (needs explicit approval)":"")}).join("\n"),"","## Limits","",R.limits.map(function(l){return"- "+l}).join("\n"),"","---","Rule-based analysis by Spark over the data in view; findings are hypotheses for a human to verify. "+a.dl.text);return o.join("\n")}
+ o.push("## Recommended next steps (none executed)","",R.recs.map(function(r){return"- ["+r.p+"] "+r.t+(r.dis?" (needs explicit approval)":"")}).join("\n"),"","## Limits","",R.limits.map(function(l){return"- "+l}).join("\n"),"","---","Rule-based analysis by AutoAdjust over the data in view; findings are hypotheses for a human to verify. "+a.dl.text);return o.join("\n")}
 /* ---- runner ---- */
 function stepsOf(role,task,R){var s=[{s:0,t:"Request received: \u201c"+task+"\u201d"}];[1,2].forEach(function(k){R.L[k].forEach(function(t){s.push({s:k,t:t})})});
  if(R.L[3].length)s.push({s:3,t:R.L[3][0]});R.findings.forEach(function(f,i){s.push({s:3,t:(f.sev==="critical"||f.sev==="high"?"ALERT ":"")+"Finding: "+f.t.slice(0,150),find:i,al:f.sev==="critical"||f.sev==="high"})});R.L[3].slice(1).forEach(function(t){s.push({s:3,t:t})});
@@ -290,7 +290,7 @@ function paintCon(role){var root=$("con-"+role);if(!root)return;var a=agState(ro
   o+='<div class="con-done"><h4 class="con-sub">Result: '+esc(R.head)+" "+sev(R.sev)+"</h4>";
   R.extra.forEach(function(x){o+='<h4 class="con-sub">'+esc(x.title)+"</h4>"+(x.code?'<pre class="con-code">'+esc(x.code)+"</pre>":"<pre class=\"con-code\">"+esc(x.text)+"</pre>")});
   o+='<h4 class="con-sub">Recommended next steps <span class="chip">none executed</span></h4>';
-  o+=R.recs.map(function(r,i){var p=a.pend,req=a.reqd&&a.reqd[i];return'<div class="con-r"><span class="chip p'+r.p+'">'+esc(r.p)+"</span><span>"+esc(r.t)+(r.dis?' <small class="warn">needs explicit approval</small>':"")+"</span>"+(r.srv?'<span class="badge b-live">PROPOSED \u2014 awaiting approval (Pending Approvals)</span>':r.dis&&r.type?(req?'<span class="badge b-live">'+esc(req)+"</span>":p===i?'<span class="con-ask">Send this as a request for approval? Spark will NOT carry it out.<button type="button" class="mini" data-conyes="'+role+'" data-i="'+i+'">Yes, send request</button><button type="button" class="mini" data-conno="'+role+'">Cancel</button></span>':'<button type="button" class="mini" data-conreq="'+role+'" data-i="'+i+'">Request approval</button>'):"")+"</div>"}).join("");
+  o+=R.recs.map(function(r,i){var p=a.pend,req=a.reqd&&a.reqd[i];return'<div class="con-r"><span class="chip p'+r.p+'">'+esc(r.p)+"</span><span>"+esc(r.t)+(r.dis?' <small class="warn">needs explicit approval</small>':"")+"</span>"+(r.srv?'<span class="badge b-live">PROPOSED \u2014 awaiting approval (Pending Approvals)</span>':r.dis&&r.type?(req?'<span class="badge b-live">'+esc(req)+"</span>":p===i?'<span class="con-ask">Send this as a request for approval? AutoAdjust will NOT carry it out.<button type="button" class="mini" data-conyes="'+role+'" data-i="'+i+'">Yes, send request</button><button type="button" class="mini" data-conno="'+role+'">Cancel</button></span>':'<button type="button" class="mini" data-conreq="'+role+'" data-i="'+i+'">Request approval</button>'):"")+"</div>"}).join("");
   o+='<h4 class="con-sub">Limits</h4><ul class="con-lim">'+R.limits.map(function(l){return"<li>"+esc(l)+"</li>"}).join("")+"</ul>";
   o+='<div class="ctl"><button type="button" class="mini" data-conrep="'+role+'">View report</button><button type="button" class="mini" data-condl="'+role+'">Download report (.md)</button><button type="button" class="mini" data-concopy="'+role+'">Copy report</button><button type="button" class="mini" data-conai="'+role+'">Ask AI to comment</button><span class="st" id="con-msg-'+role+'" role="status"></span></div><div id="con-rep-'+role+'"></div><div id="con-aic-'+role+'" class="res" hidden></div></div>'}
  $("con-out-"+role).innerHTML=o;

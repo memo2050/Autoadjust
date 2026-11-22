@@ -7,11 +7,11 @@ The NOC page has a topology platform: define an approved network, discover devic
 | Piece | Where | Why |
 |---|---|---|
 | Web page (map, discovery, changes, health) | Browser | No credentials ever reach it |
-| API, database, scope check, topology graph, change approvals, audit | Spark backend (`/api/soc/noc/*`) | Serverless; it cannot reach private networks |
+| API, database, scope check, topology graph, change approvals, audit | AutoAdjust backend (`/api/soc/noc/*`) | Serverless; it cannot reach private networks |
 | **Discovery agent** `collector/discovery/discovery-agent.mjs` | A machine **inside** your network | Does the ICMP/TCP/ARP/SNMP work and holds SNMP credentials. Outbound HTTPS only, no inbound port |
 | Config executor (your script, optional) | Same machine | The only piece that logs in to devices |
 
-**The Spark backend cannot scan.** Without an online agent, scan jobs stay *queued*. This is shown on the page.
+**The AutoAdjust backend cannot scan.** Without an online agent, scan jobs stay *queued*. This is shown on the page.
 
 ## Setup
 1. Backend: set `SOC_ADMIN_TOKEN`, `SOC_ANALYST_TOKEN`, `SOC_VIEWER_TOKEN`, `SOC_INGEST_TOKEN`, and `NOC_SECRET_KEY` (32+ random characters; needed to hold configs for rollback). Run `supabase/007_topology.sql` after `006`.
@@ -44,7 +44,7 @@ Positions, labels, zones, VLAN/subnet/zone groups, manual devices and manual lin
 `propose (analyst) → approve (admin, must type the device name) → agent runs executor: backup, apply, read back → result`.
 - **applied** only if the executor succeeded **and** every proposed line is in the read-back running config. Missing read-back or missing lines → **unverified**. Executor failure → **failed**.
 - Rollback creates a new proposal from the pre-change backup and needs approval again. No backup (or no `NOC_SECRET_KEY`) means no rollback.
-- `CONFIG_EXECUTOR` is an executable you provide for your vendor (SSH/NETCONF/API). It gets JSON on stdin `{action: backup|apply|readback, device, proposed}` and prints the config text. **Spark ships no vendor executor**, so until you supply one every approved change ends **failed** with "No CONFIG_EXECUTOR is configured". Nothing is applied.
+- `CONFIG_EXECUTOR` is an executable you provide for your vendor (SSH/NETCONF/API). It gets JSON on stdin `{action: backup|apply|readback, device, proposed}` and prints the config text. **AutoAdjust ships no vendor executor**, so until you supply one every approved change ends **failed** with "No CONFIG_EXECUTOR is configured". Nothing is applied.
 
 ## Endpoints (all under `/api/soc/`)
 Read: `noc/topology?map=`, `noc/discovery`, `noc/maps`, `noc/maps/:id/versions`, `noc/changes`. Analyst: `POST noc/maps`, `noc/maps/:id/save`, `/restore`, `noc/backups/:deviceId` (GET/POST), `POST noc/changes`. Admin: `noc/scopes` (POST/DELETE), `noc/scans` (POST), `/cancel`, `noc/devices/:id/adopt`, `noc/changes/:id/approve|reject|rollback`. Agent (ingest token): `GET noc/scans/pending`, `POST noc/scans/:id/progress|complete`, `GET noc/changes/pending`, `POST noc/changes/:id/backup|result`.

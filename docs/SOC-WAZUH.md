@@ -1,4 +1,4 @@
-# Spark SOC + Wazuh (read-only)
+# AutoAdjust SOC + Wazuh (read-only)
 
 ## What is real
 - Endpoint agents (online/offline, version, groups) come from the Wazuh Manager API (port 55000).
@@ -20,7 +20,7 @@ The client only does GET, the authenticate POST and Indexer `_search`. No active
 GET `/api/soc/wazuh/status` (read) · POST `wazuh/sync` (ingest) · POST `wazuh/test/connection|event|cleanup` (admin approve) · POST `ingest/wazuh`, GET `wazuh/cursor`, POST `wazuh/bridge-error|bridge-test` (ingest token). Apply `supabase/008_wazuh.sql`.
 
 ## Detections
-Brute force, suspicious Windows logons, privilege escalation, suspicious PowerShell, malware indicators, file integrity (sensitive paths raised to high), suspicious network activity. Wazuh rule level ≥ `WAZUH_MIN_LEVEL` becomes an alert (`WZH-<rule id>`). MITRE comes from Wazuh; Spark infers only T1110 (brute force) and T1059.001 (PowerShell) and says so in the alert reasoning. Windows-channel alerts also run through Spark's Windows rules.
+Brute force, suspicious Windows logons, privilege escalation, suspicious PowerShell, malware indicators, file integrity (sensitive paths raised to high), suspicious network activity. Wazuh rule level ≥ `WAZUH_MIN_LEVEL` becomes an alert (`WZH-<rule id>`). MITRE comes from Wazuh; AutoAdjust infers only T1110 (brute force) and T1059.001 (PowerShell) and says so in the alert reasoning. Windows-channel alerts also run through AutoAdjust's Windows rules.
 
 ## Honest limits
 - Tested only against local fake Wazuh servers, not a real deployment. Expect to verify TLS, roles and index names on first connection.

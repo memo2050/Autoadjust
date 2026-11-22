@@ -1,4 +1,4 @@
-# Spark NOC: real monitoring with Zabbix
+# AutoAdjust NOC: real monitoring with Zabbix
 
 This turns the NOC page from a demo into a view of real monitoring data. Read "What works and what does not" first.
 
@@ -7,12 +7,12 @@ This turns the NOC page from a demo into a view of real monitoring data. Read "W
 | Area | Status |
 |---|---|
 | Zabbix 6.4+ API (pull) and bridge (push) | Built. Tested only against a **fake Zabbix server** that mimics the API. Not yet tested against your real Zabbix. |
-| SNMPv3, ICMP, Agent 2, HTTP checks | Collected **by Zabbix**. Spark reads the resulting items. Spark has no SNMP poller of its own. |
+| SNMPv3, ICMP, Agent 2, HTTP checks | Collected **by Zabbix**. AutoAdjust reads the resulting items. AutoAdjust has no SNMP poller of its own. |
 | Prometheus, Grafana | Alerts only, through `POST /api/soc/noc/alerts`. Metric scraping is not built. |
 | Syslog | Not collected. Use Zabbix log items or forward alerts to the webhook. |
 | Alerts to incidents, 14-step workflow, six agents, approvals, execution, verification | Built and tested (54 automated tests, mock Zabbix). |
 | Real router / real switch / real alert / real approved action | **Needs your Zabbix and devices.** See the acceptance checklist. |
-| Background monitoring | Spark does not poll by itself. Data arrives when the bridge pushes, when someone presses Sync, or when the page is open (the page only reads). To poll without the bridge, schedule `POST /api/soc/noc/sources/<id>/sync` (for example Vercel Cron). |
+| Background monitoring | AutoAdjust does not poll by itself. Data arrives when the bridge pushes, when someone presses Sync, or when the page is open (the page only reads). To poll without the bridge, schedule `POST /api/soc/noc/sources/<id>/sync` (for example Vercel Cron). |
 | Live push to browser | The page polls `/api/soc/noc/overview` every 10 s. SSE/WebSocket are not used because the backend is serverless. |
 
 ## Architecture
@@ -24,7 +24,7 @@ This turns the NOC page from a demo into a view of real monitoring data. Read "W
                                         |  (API on localhost / LAN)           |
                        zabbix-bridge.mjs (runs on the same VM, OUTBOUND only)  |
                                         v  HTTPS + ingest token               |
-                        Spark backend /api/soc/noc/*  -->  database (Supabase)
+                        AutoAdjust backend /api/soc/noc/*  -->  database (Supabase)
                                         ^
                               Browser page (polls /noc/overview, admin token)
 ```
@@ -51,9 +51,9 @@ Why a bridge: your Zabbix VM is on a private network. A cloud-hosted backend (Ve
 - **Routers, managed switches, firewalls (SNMPv3):** on the device enable SNMPv3 (authPriv, SHA + AES, a dedicated read-only user). In Zabbix: Data collection > Hosts > Create host, group `Routers` / `Switches` / `Firewalls`, add an SNMP interface (version SNMPv3, security level authPriv, your credentials), link template `Network Generic Device by SNMP` or the vendor template. Use SNMPv2c only for gear that cannot do v3 and only on an isolated management VLAN.
 - **Linux/Windows servers:** install Zabbix Agent 2, point `Server=` at the Zabbix VM, link `Linux by Zabbix agent` / `Windows by Zabbix agent`. Put them in a group named `Linux servers` / `Windows servers`.
 - **VMs:** link `VMware` templates (or agent). **HTTP checks:** a web scenario or `net.tcp.service` item. **Ping:** template `ICMP Ping`.
-- Spark guesses a device's type from its host group, so name groups sensibly. A metric Zabbix does not collect for a device shows as **no data** and is listed under that device's unsupported metrics. Spark never fills it in.
+- AutoAdjust guesses a device's type from its host group, so name groups sensibly. A metric Zabbix does not collect for a device shows as **no data** and is listed under that device's unsupported metrics. AutoAdjust never fills it in.
 
-## 4. Connect Spark
+## 4. Connect AutoAdjust
 
 **Option A, bridge (recommended for a private Zabbix):**
 1. In the NOC page, *Add a monitoring source*: type Zabbix, mode **push**, name it. Copy the source id from the API (`GET /api/soc/noc/overview` shows it).

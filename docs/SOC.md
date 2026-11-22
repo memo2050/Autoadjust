@@ -1,6 +1,6 @@
-# Spark SOC module: AI SOC Analyst workspace
+# AutoAdjust SOC module: AI SOC Analyst workspace
 
-What this is: a working first milestone of an agentic SOC inside your Spark site. Click the **SOC Analyst** pill in the SOC Team picture (or the "Open the SOC Analyst AI workspace" button) to open the workspace.
+What this is: a working first milestone of an agentic SOC inside your AutoAdjust site. Click the **SOC Analyst** pill in the SOC Team picture (or the "Open the SOC Analyst AI workspace" button) to open the workspace.
 
 ## 1. What the existing site had, and what was missing
 
@@ -17,7 +17,7 @@ Missing for a real SOC: any storage of security data, any log ingestion, detecti
 | Greenbone/OpenVAS report import (XML and CSV), dedupe, priority score, fixed/reappeared tracking, optional CISA KEV file | Built, tested on synthetic reports. Not yet tested against a report from your own Greenbone. |
 | Incident workflow Open / Investigating / Contained / Remediated / Closed with a remediation check that uses new telemetry | Built, tested. "Passed" is only possible when new events arrived from the asset after remediation and the same rules did not fire again. |
 | AI SOC Analyst (Investigate Alert, Analyze Event, Generate Security Report, free questions) | Built. Evidence packet is built on the server, evidence ids cited by the model are validated (invented ids are dropped), findings are labeled hypotheses. Tested with a mock model; not yet run with a live Anthropic key. |
-| Human approval for disruptive actions | Built: proposals are stored, only an admin can approve, **nothing is executed by Spark**. |
+| Human approval for disruptive actions | Built: proposals are stored, only an admin can approve, **nothing is executed by AutoAdjust**. |
 | Audit log, RBAC via server-side tokens, dev-auth disabled in production | Built, tested. |
 | Workspace UI in the home page | Built; checked in a browser in sample mode and against a running test backend. |
 | Other four agents (Vulnerability Analyst, Threat Hunter, Incident Responder, Security Advisor as separate agents) | **Not built yet.** The "Generate Security Report" button uses the analyst engine. |
@@ -67,7 +67,7 @@ Manual validation plan: (1) send 6 wrong-password logons to your test PC and con
 **Honest limits of this phase:**
 - The Windows collector has been tested only against its API contract and a synthetic payload, never on a real Windows PC. Run it on your authorized test PC and compare.
 - Supabase migrations 003/004, the real Anthropic key and a Next.js production build were not run in this environment.
-- No response connector exists: Approve records the decision, a human performs the action and marks it done. Spark never isolates, blocks or disables anything.
+- No response connector exists: Approve records the decision, a human performs the action and marks it done. AutoAdjust never isolates, blocks or disables anything.
 - Identity is the API token's role, not a per-user account. Audit entries name the token, so use one token per person until SSO is added.
 - Live view is polling every 5 s, not a push stream.
 - Detections are rule-based; the agents' analyses are rule-based on stored events, and AI is used only where an API key is configured and labeled as hypotheses with event IDs.
@@ -87,7 +87,7 @@ Manual validation plan: (1) send 6 wrong-password logons to your test PC and con
 **Limits:** NOC incidents, approvals-in-sample-mode, escalation history and agent run history are stored in the browser's localStorage, not shared. Escalations to the SOC are recorded and shown on the NOC page but the SOC console does not receive them yet. Agents are rule-based and read telemetry only: they never ping, trace, poll SNMP or change a device. Config review needs a `config` object per device. Packet animation speed follows link utilization; it is not real packet capture. The AI question box needs an AI service on the site and is labelled as a hypothesis.
 
 ## SOC Team role panels
-All six icons open a workspace (`scripts/soc-workspace.part.html`, `soc-roles.js`). Tools are in `lib/soc/roles.ts` and run on the server and, bundled (`scripts/build-browser-engine.sh`), in the browser. Each panel shows SAMPLE data without a backend and real stored data with one. Playbook ticks, notes, drafts and sample status changes are stored only in the browser. Spark never executes a response action; approvals are only recorded. Run `npx tsx --test tests/*.test.ts`.
+All six icons open a workspace (`scripts/soc-workspace.part.html`, `soc-roles.js`). Tools are in `lib/soc/roles.ts` and run on the server and, bundled (`scripts/build-browser-engine.sh`), in the browser. Each panel shows SAMPLE data without a backend and real stored data with one. Playbook ticks, notes, drafts and sample status changes are stored only in the browser. AutoAdjust never executes a response action; approvals are only recorded. Run `npx tsx --test tests/*.test.ts`.
 
 
 ## Phase 5: real-time NOC
